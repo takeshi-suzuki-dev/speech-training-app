@@ -67,6 +67,7 @@ Currently working on Phase 0 (PoC):
 - Validating Azure AI pronunciation assessment
 - Validating ElevenLabs audio generation
 - Implementing end-to-end data flow
+- Handling Azure response states in the UI
 
 ---
 

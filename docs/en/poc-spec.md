@@ -26,16 +26,19 @@ Frontend → Backend → ElevenLabs → Backend → Frontend
 ### 1. Azure AI Integration
 
 #### Input
+
 - Display a fixed practice sentence
 - Start recording when the "Start Recording" button is pressed
 - Stop recording when the "Stop Recording" button is pressed
 - Send recorded audio along with the practice sentence to the backend
 
 #### Processing
+
 - Send audio and text to Azure AI for pronunciation assessment
 - Retrieve the evaluation results
 
 #### Output
+
 Display the following:
 
 - Overall score
@@ -51,16 +54,48 @@ Display the following:
 - Display the full Azure API response
 - This is used for inspection and validation of returned data
 
+### 2.1 Azure Response Handling
+
+The backend checks Azure responses in two steps:
+
+- First, check HTTP status
+- Second, when HTTP 200 is returned, check `RecognitionStatus`
+
+Expected handling:
+
+- `Success`
+  - Display evaluation scores
+  - Display transcript / word-level / phoneme-level results
+- `InitialSilenceTimeout`
+  - Show a no-speech message
+  - Show score fields as `-`
+- `BabbleTimeout`
+  - Show a noise-detected message
+  - Show score fields as `-`
+- `NoMatch`
+  - Show a not-recognized-clearly message
+  - Show score fields as `-`
+- `Error`
+  - Show an internal scoring error message
+  - Show score fields as `-`
+
+Phase policy:
+
+- Phase 1: no frontend pre-checks before sending audio
+- Phase 2: add recording-time detection and pre-submit checks
+
 ---
 
 ### 3. ElevenLabs Integration
 
 #### Generation
+
 - Add a button: "Generate Sample Audio with ElevenLabs"
 - Send the sentence to ElevenLabs only when the button is pressed
 - Retrieve generated sample audio
 
 #### Playback
+
 - Add a button: "Play Sample Audio"
 - Play the generated audio only when the button is pressed
 
@@ -76,9 +111,11 @@ Display the following:
 ## Audio Format (Tentative)
 
 Preferred:
+
 - `audio/wav; codecs=audio/pcm; samplerate=16000` (mono)
 
 Alternative:
+
 - `audio/ogg; codecs=opus`
 
 The final format will be determined based on frontend recording capabilities.

@@ -86,6 +86,7 @@ Turn the PoC into a minimally usable product.
 - Manage multiple practice sentences (DB)
 - Display evaluation results in a well-organized single screen
 - Add a simple login screen (if needed)
+- Switch result display based on Azure `RecognitionStatus`
 
 ---
 
@@ -110,6 +111,7 @@ Enhance learning experience and enable continuous usage.
 - Provide advice based on evaluation results
 - Allow users to add custom practice sentences
 - Generate sample audio using ElevenLabs and store it in the database
+- Add recording-time audio level detection and pre-submit checks
 
 ---
 
