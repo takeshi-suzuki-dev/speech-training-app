@@ -5,7 +5,6 @@ import java.util.Map;
 
 public class SpeechEvaluateResponse {
     private String transcript;
-    private Integer overallScore;
     private SentenceScores sentenceScores;
     private List<WordResult> words;
     private List<PhonemeResult> phonemes;
@@ -18,14 +17,6 @@ public class SpeechEvaluateResponse {
 
     public void setTranscript(String transcript) {
         this.transcript = transcript;
-    }
-
-    public Integer getOverallScore() {
-        return overallScore;
-    }
-
-    public void setOverallScore(Integer overallScore) {
-        this.overallScore = overallScore;
     }
 
     public SentenceScores getSentenceScores() {

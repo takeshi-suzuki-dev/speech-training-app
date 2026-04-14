@@ -7,6 +7,7 @@ public class SentenceScores {
     private Integer fluency;
     private Integer completeness;
     private Integer prosody;
+    private Integer pron;
     private Map<String, Object> additionalScores;
 
     public Integer getAccuracy() {
@@ -39,6 +40,14 @@ public class SentenceScores {
 
     public void setProsody(Integer prosody) {
         this.prosody = prosody;
+    }
+
+    public Integer getPron() {
+        return pron;
+    }
+
+    public void setPron(Integer pron) {
+        this.pron = pron;
     }
 
     public Map<String, Object> getAdditionalScores() {
