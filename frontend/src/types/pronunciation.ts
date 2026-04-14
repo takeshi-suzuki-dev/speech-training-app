@@ -3,6 +3,7 @@ export type SentenceScores = {
   fluency: number;
   completeness: number;
   prosody: number;
+  pron: number;
   additionalScores?: Record<string, unknown>;
 };
 
