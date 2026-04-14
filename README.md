@@ -64,10 +64,11 @@ For details:
 
 Currently working on Phase 0 (PoC):
 
-- Validating Azure AI pronunciation assessment
-- Validating ElevenLabs audio generation
-- Implementing end-to-end data flow
-- Handling Azure response states in the UI
+- Azure Speech pronunciation assessment API integrated in backend
+- Key pronunciation assessment fields displayed in frontend
+- ElevenLabs API connectivity validated via curl
+- Word-level and phoneme-level response mapping in progress
+  Current PoC scope: transcript and sentence-level key scores are working; detailed word and phoneme mapping is the next step.
 
 ---
 

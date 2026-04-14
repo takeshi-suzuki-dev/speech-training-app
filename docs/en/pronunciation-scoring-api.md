@@ -14,7 +14,7 @@ This API is **only for scoring**.
 
 Speech generation is handled separately by another API based on ElevenLabs, so it is outside the scope of this document.
 
------
+---
 
 ## Scope
 
@@ -35,7 +35,7 @@ This document covers only the pronunciation scoring side of the application.
 
 Those features belong to a separate API.
 
------
+---
 
 ## Goal
 
@@ -49,7 +49,7 @@ This PoC is intended to confirm:
 
 The goal is not to finalize a production-ready API yet.
 
------
+---
 
 ## Endpoint
 
@@ -59,7 +59,7 @@ The goal is not to finalize a production-ready API yet.
 
 `multipart/form-data`
 
------
+---
 
 ## Request Design
 
@@ -81,7 +81,7 @@ The following fields are intentionally excluded from the initial PoC scope:
 
 These can be added later if needed.
 
------
+---
 
 ## Response Design
 
@@ -109,7 +109,7 @@ The response is organized into three groups:
 
 - `rawJson`
 
------
+---
 
 ## Response Field Details
 
@@ -181,7 +181,7 @@ Original Azure Speech response payload kept for:
 - future field extraction
 - backend/frontend comparison during PoC development
 
------
+---
 
 ## Example Response
 
@@ -226,7 +226,7 @@ Original Azure Speech response payload kept for:
 }
 ```
 
------
+---
 
 ## Data Relationship
 
@@ -236,7 +236,7 @@ For frontend rendering, phoneme-level data is grouped under the related word usi
 
 This keeps the API response explicit while still allowing a word-centered UI layout.
 
------
+---
 
 ## Frontend Rendering Strategy
 
@@ -281,7 +281,7 @@ Lower-priority scoring-related data can be shown below:
 
 These sections may be collapsible for readability.
 
------
+---
 
 ## UI Structure Idea
 
@@ -298,7 +298,7 @@ Example structure:
 
 This keeps the relationship between word-level and phoneme-level scoring data easy to understand.
 
------
+---
 
 ## Error Handling
 
@@ -330,7 +330,7 @@ For validation or processing failures, the API should return:
 
 A more detailed production-ready error model can be introduced later.
 
------
+---
 
 ## Design Principles
 
@@ -343,7 +343,7 @@ This PoC follows these principles:
 - preserve original Azure scoring response data for verification and expansion
 - keep scoring responsibility separate from speech generation responsibility
 
------
+---
 
 ## Responsibility Boundary
 
@@ -361,7 +361,7 @@ This PoC follows these principles:
 
 Those responsibilities belong to a separate ElevenLabs-based API.
 
------
+---
 
 ## Implementation Notes
 
@@ -377,7 +377,7 @@ Those responsibilities belong to a separate ElevenLabs-based API.
 - scoring response is rendered in a readable layout
 - word-level and phoneme-level scoring information are grouped together
 
------
+---
 
 ## PoC Exit Criteria
 
@@ -394,7 +394,7 @@ The PoC is considered successful when:
 - the `rawJson` field can be inspected in the UI
 - word-level and phoneme-level scoring feedback are visible in a readable layout
 
------
+---
 
 ## Future Improvements
 
