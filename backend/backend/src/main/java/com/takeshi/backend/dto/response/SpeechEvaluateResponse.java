@@ -1,14 +1,12 @@
 package com.takeshi.backend.dto.response;
 
 import java.util.List;
-import java.util.Map;
 
 public class SpeechEvaluateResponse {
     private String transcript;
     private SentenceScores sentenceScores;
     private List<WordResult> words;
     private List<PhonemeResult> phonemes;
-    private Map<String, Object> extras;
     private Object rawJson;
 
     public String getTranscript() {
@@ -41,14 +39,6 @@ public class SpeechEvaluateResponse {
 
     public void setPhonemes(List<PhonemeResult> phonemes) {
         this.phonemes = phonemes;
-    }
-
-    public Map<String, Object> getExtras() {
-        return extras;
-    }
-
-    public void setExtras(Map<String, Object> extras) {
-        this.extras = extras;
     }
 
     public Object getRawJson() {
