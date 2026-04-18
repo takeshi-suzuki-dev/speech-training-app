@@ -89,6 +89,9 @@ public class PronunciationService {
             }
 
             return mapAzureResponse(response.body());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Failed to call Azure Speech API: ", e);
         } catch (Exception e) {
             throw new RuntimeException("Failed to call Azure Speech API: ", e);
         }
@@ -212,7 +215,7 @@ public class PronunciationService {
 
                         if (i == 0) {
                             putIfPresent(phonemeScores, CANDIDATE_1_SCORE_KEY, doubleOrNull(candidateNode.get(SCORE)));
-                        } else if (i == 1) {
+                        } else {
                             putIfPresent(phonemeScores, CANDIDATE_2_SCORE_KEY, doubleOrNull(candidateNode.get(SCORE)));
                         }
                     }
