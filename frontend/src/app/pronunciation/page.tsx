@@ -28,6 +28,7 @@ export default function PronunciationPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [expandedWord, setExpandedWord] = useState<number | null>(null);
+  const [rawJsonOpen, setRawJsonOpen] = useState(false);
 
   const handleSubmit = async () => {
     if (!audioFile) {
@@ -249,10 +250,11 @@ export default function PronunciationPage() {
                                       "Phoneme",
                                       "Expected IPA",
                                       "Accuracy",
-                                      "Candidates",
-                                    ].map((h) => (
+                                      "1st Candidate",
+                                      "2nd Candidate",
+                                    ].map((h, hi) => (
                                       <th
-                                        key={h}
+                                        key={`${h}-${hi}`}
                                         className="pb-1.5 text-left text-[0.58rem] font-semibold uppercase tracking-widest text-gray-500"
                                       >
                                         {h}
@@ -266,6 +268,16 @@ export default function PronunciationPage() {
                                       ph.scores?.accuracyScore ??
                                         ph.scores?.accuracy ??
                                         0,
+                                    );
+                                    const candidate1 =
+                                      ph.candidates?.[0] ?? "-";
+                                    const candidate2 =
+                                      ph.candidates?.[1] ?? "-";
+                                    const candidate1Score = Number(
+                                      ph.scores?.candidate1Score ?? 0,
+                                    );
+                                    const candidate2Score = Number(
+                                      ph.scores?.candidate2Score ?? 0,
                                     );
                                     return (
                                       <tr
@@ -283,19 +295,31 @@ export default function PronunciationPage() {
                                         >
                                           {acc}
                                         </td>
+                                        {/* 1st Candidate */}
                                         <td className="py-1.5">
-                                          <div className="flex flex-wrap gap-1">
-                                            {(ph.candidates ?? []).map(
-                                              (c, ci) => (
-                                                <span
-                                                  key={ci}
-                                                  className="rounded bg-gray-200 px-1.5 py-0.5 text-[0.65rem] text-gray-600"
-                                                >
-                                                  {c}
-                                                </span>
-                                              ),
-                                            )}
-                                          </div>
+                                          <span className="w-28 inline-flex items-center gap-1.5">
+                                            <span className="w-6 rounded bg-gray-200 px-1.5 py-0.5 text-[0.65rem] text-gray-600">
+                                              {candidate1}
+                                            </span>
+                                            <span
+                                              className={`font-bold px-1.5 py-0.5  ${scoreColor(candidate1Score)}`}
+                                            >
+                                              {candidate1Score || "-"}
+                                            </span>
+                                          </span>
+                                        </td>
+                                        {/* 2nd Candidate */}
+                                        <td className="py-1.5">
+                                          <span className="w-28 inline-flex items-center gap-1.5">
+                                            <span className="w-6 rounded bg-gray-200 px-1.5 py-0.5 text-[0.65rem] text-gray-600">
+                                              {candidate2}
+                                            </span>
+                                            <span
+                                              className={`font-bold px-1.5 py-0.5  ${scoreColor(candidate2Score)}`}
+                                            >
+                                              {candidate2Score || "-"}
+                                            </span>
+                                          </span>
                                         </td>
                                       </tr>
                                     );
@@ -313,6 +337,36 @@ export default function PronunciationPage() {
                     );
                   })}
                 </div>
+              </div>
+            )}
+
+            {/* Raw JSON */}
+            {result?.rawJson != null && (
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <button
+                  className="flex w-full items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition"
+                  onClick={() => setRawJsonOpen((prev) => !prev)}
+                >
+                  <p className="text-[0.6rem] font-semibold uppercase tracking-widest text-gray-500">
+                    Raw JSON
+                  </p>
+                  <svg
+                    className={`text-gray-400 transition-transform ${rawJsonOpen ? "rotate-180" : ""}`}
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+                {rawJsonOpen && (
+                  <pre className="overflow-x-auto border-t border-gray-100 bg-gray-50 px-4 py-3 text-[11px] leading-5 text-gray-700">
+                    {JSON.stringify(result.rawJson, null, 2)}
+                  </pre>
+                )}
               </div>
             )}
           </div>
