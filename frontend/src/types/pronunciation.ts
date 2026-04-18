@@ -31,6 +31,5 @@ export type SpeechEvaluateResponse = {
   sentenceScores: SentenceScores;
   words: WordResult[];
   phonemes: PhonemeResult[];
-  extras: Record<string, unknown>;
   rawJson: unknown;
 };
