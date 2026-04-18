@@ -24,18 +24,13 @@ Frontend → Backend → ElevenLabs → Backend → Frontend
 ### 表示
 
 - 定型文（固定）
-- 音声入力ボタン（「開始」「終了」）
+- 音声ファイル選択
+- Score ボタン
 
-### 音声入力
+### 音声送信
 
-- 開始ボタン押下 → 録音開始
-- 終了ボタン押下 → 録音終了
-
-### 音声送信形式
-
-- 第一候補：`audio/wav; codecs=audio/pcm; samplerate=16000`（mono）
-- 代替：`audio/ogg; codecs=opus`
-- 最終決定：フロント録音方式に依存（後で調整OK）
+- 選択した音声ファイルを backend に送る
+- ブラウザ録音 / wav化 は Phase 0 では対象外
 
 ### API送信
 
@@ -61,27 +56,29 @@ Backendに送る内容：
 
 ### レスポンス整形
 
-Frontendに返す内容（例）：
+Frontendに返す内容：
 
-```json
-{
-  "overallScore": 85,
-  "categoryScores": {},
-  "words": [],
-  "phonemes": [],
-  "rawResponse": {}
-}
-```
-
-※ フィールド名・構造はAzureのレスポンスを確認後に確定する
-
-| フィールド     | 内容                       |
-| -------------- | -------------------------- |
-| overallScore   | 全体スコア                 |
-| categoryScores | 各評価項目（fluencyなど）  |
-| words          | 単語単位スコア             |
-| phonemes       | 音素スコア・音素ごとの判定 |
-| rawResponse    | AzureのレスポンスJSON全文  |
+- transcript
+- sentenceScores
+  - accuracy
+  - fluency
+  - completeness
+  - prosody
+  - pron
+- words
+  - word
+  - accuracyScore
+  - errorType
+  - offset / duration
+- phonemes
+  - word
+  - phoneme
+  - expectedIpa
+  - accuracyScore
+  - candidate 1 / 2
+  - candidate1Score / candidate2Score
+  - offset / duration
+- rawJson
 
 ---
 
@@ -90,44 +87,16 @@ Frontendに返す内容（例）：
 ### 表示項目
 
 - 全体スコア
-- 各評価項目
+- sentence-level scores
 - 単語スコア
-- 音素スコア・音素の判定
+- 音素スコア
+- 音素ごとの第一・第二候補
+- 候補スコア
 
 ### rawレスポンス表示
 
-- ① ベタ表示（最優先）
-- ② 余裕あれば開閉トグル（＋/−）
-- 工数かかるなら①でOK
-
-### Azureレスポンスの扱い
-
-Backend では Azure のレスポンスを以下の順で扱う。
-
-- まず HTTP status を確認する
-- HTTP 200 の場合のみ `RecognitionStatus` を確認する
-
-`RecognitionStatus` ごとの想定：
-
-- `Success`
-  - 採点結果を表示する
-  - transcript / 単語 / 音素の結果を返す
-- `InitialSilenceTimeout`
-  - 無音として扱う
-  - スコア欄は `-`
-  - メッセージを表示する
-- `BabbleTimeout`
-  - ノイズ過多として扱う
-  - スコア欄は `-`
-  - メッセージを表示する
-- `NoMatch`
-  - 音声は検出されたが認識不十分として扱う
-  - スコア欄は `-`
-  - メッセージを表示する
-- `Error`
-  - Azure側内部エラーとして扱う
-  - スコア欄は `-`
-  - メッセージを表示する
+- 開閉トグルで表示
+- 整形済み JSON を表示
 
 ### エラー処理方針
 
@@ -194,6 +163,8 @@ Backend では Azure のレスポンスを以下の順で扱う。
 
 ## やらないこと（Phase 0）
 
+- ブラウザ録音
+- wav化
 - フィードバック文生成（Phase1）
 - DB保存（Phase1）
 - スコア推移グラフ（Phase1）
@@ -206,9 +177,10 @@ Backend では Azure のレスポンスを以下の順で扱う。
 
 **Azure**
 
-- 音声が送れる
+- 音声ファイルが送れる
 - Azureからスコアが返る
-- 各粒度のスコアが確認できる
+- sentence / word / phoneme が確認できる
+- 音素候補1位・2位と score が確認できる
 - raw レスポンスが見れる
 
 **ElevenLabs**

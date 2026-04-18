@@ -96,14 +96,9 @@ The response is organized into three groups:
 #### Core scoring fields
 
 - `transcript`
-- `overallScore`
 - `sentenceScores`
 - `words`
 - `phonemes`
-
-#### Optional/supporting fields
-
-- `extras`
 
 #### Original source data
 

@@ -8,7 +8,7 @@ The goal of this phase is to validate the technical feasibility of the core feat
 
 - Pronunciation assessment using Azure AI
 - Sample audio generation using ElevenLabs
-- End-to-end data flow: audio input → API → result retrieval → display
+- End-to-end data flow: audio file input → API → result retrieval → display
 
 ---
 
@@ -28,9 +28,8 @@ Frontend → Backend → ElevenLabs → Backend → Frontend
 #### Input
 
 - Display a fixed practice sentence
-- Start recording when the "Start Recording" button is pressed
-- Stop recording when the "Stop Recording" button is pressed
-- Send recorded audio along with the practice sentence to the backend
+- Select an audio file
+- Send the audio file along with the practice sentence to the backend
 
 #### Processing
 
@@ -42,10 +41,11 @@ Frontend → Backend → ElevenLabs → Backend → Frontend
 Display the following:
 
 - Overall score
-- Category scores (e.g., fluency)
+- Sentence-level scores (accuracy / fluency / completeness / prosody)
 - Word-level scores
 - Phoneme-level scores
-- First detected candidate for each phoneme
+- First and second detected candidates for each phoneme
+- Candidate scores for the first and second phoneme candidates
 
 ---
 
@@ -126,6 +126,8 @@ The final format will be determined based on frontend recording capabilities.
 
 The following features are intentionally excluded from this phase:
 
+- Browser recording
+- WAV conversion
 - Database integration
 - Feedback generation
 - Learning analytics
@@ -138,9 +140,10 @@ The following features are intentionally excluded from this phase:
 
 This phase is considered successful if:
 
-- Audio can be recorded and sent to the backend
+- An audio file can be sent to the backend
 - Azure AI returns pronunciation assessment results
-- All score levels (overall, category, word, phoneme) can be retrieved
+- Overall / sentence-level / word-level / phoneme-level results can be retrieved
+- First and second phoneme candidates with scores can be displayed
 - Raw Azure API response can be displayed
 - ElevenLabs can generate sample audio successfully
 - Generated audio can be played back

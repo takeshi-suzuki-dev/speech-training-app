@@ -23,17 +23,18 @@ This project is developed in four phases:
 #### Azure AI (Pronunciation Assessment)
 
 - Display a fixed practice sentence
-- Start/stop recording
+- Select an audio file
 - Send audio and text to Azure AI
 - Retrieve evaluation results
 
 Displayed data:
 
 - Overall score
-- Category scores (e.g., fluency)
+- Sentence-level scores
 - Word-level scores
 - Phoneme-level scores
-- First detected candidate for each phoneme
+- First and second detected candidates for each phoneme
+- Candidate scores for detected phoneme candidates
 - Full Azure API response (raw response)
 
 ---
@@ -49,6 +50,8 @@ Displayed data:
 
 ### Out of Scope
 
+- Browser recording
+- WAV generation
 - Database integration
 - Feedback generation
 - UI/UX optimization
@@ -62,9 +65,9 @@ Displayed data:
 - Azure AI returns evaluation results
 - All score levels can be retrieved:
   - overall
-  - category
+  - sentence-level
   - word
-  - phoneme
+  - phoneme candidates with scores
 - Raw Azure response can be inspected
 - ElevenLabs successfully generates audio
 - Generated audio can be played back
