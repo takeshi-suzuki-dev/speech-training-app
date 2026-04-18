@@ -3,8 +3,10 @@ package com.takeshi.backend.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.takeshi.backend.dto.response.PhonemeResult;
 import com.takeshi.backend.dto.response.SentenceScores;
 import com.takeshi.backend.dto.response.SpeechEvaluateResponse;
+import com.takeshi.backend.dto.response.WordResult;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,15 +16,40 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 
 @Service
 public class PronunciationService {
 
+    private static final String N_BEST = "NBest";
+    private static final String WORDS = "Words";
+    private static final String PHONEMES = "Phonemes";
+    private static final String N_BEST_PHONEMES = "NBestPhonemes";
+
+    private static final String WORD = "Word";
+    private static final String PHONEME = "Phoneme";
+    private static final String DISPLAY = "Display";
+    private static final String ERROR_TYPE = "ErrorType";
+    private static final String OFFSET = "Offset";
+    private static final String DURATION = "Duration";
+    private static final String SCORE = "Score";
+
+    private static final String ACCURACY_SCORE = "AccuracyScore";
+    private static final String FLUENCY_SCORE = "FluencyScore";
+    private static final String COMPLETENESS_SCORE = "CompletenessScore";
+    private static final String PROSODY_SCORE = "ProsodyScore";
+    private static final String PRON_SCORE = "PronScore";
+
+    private static final String WORD_ACCURACY_SCORE_KEY = "accuracyScore";
+    private static final String CANDIDATE_1_SCORE_KEY = "candidate1Score";
+    private static final String CANDIDATE_2_SCORE_KEY = "candidate2Score";
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final HttpClient httpClient = HttpClient.newHttpClient();
+
     @Value("${azure.speech.key}")
     private String speechKey;
+
     @Value("${azure.speech.region}")
     private String speechRegion;
 
@@ -38,15 +65,17 @@ public class PronunciationService {
     }
 
     private SpeechEvaluateResponse callAzureAndMapResponse(MultipartFile audio, String referenceText) {
-
         try {
-            String paJson = buildPronunciationAssessmentJson(referenceText);
-            String paBase64 = Base64.getEncoder().encodeToString(
+            var paJson = buildPronunciationAssessmentJson(referenceText);
+            var paBase64 = Base64.getEncoder().encodeToString(
                     paJson.getBytes(StandardCharsets.UTF_8)
             );
 
-            String url = "https://" + speechRegion + ".stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=detailed";
-            HttpRequest request = HttpRequest.newBuilder()
+            var url = "https://" + speechRegion
+                    + ".stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1"
+                    + "?language=en-US&format=detailed";
+
+            var request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .header("Ocp-Apim-Subscription-Key", speechKey)
                     .header("Content-Type", "audio/wav")
@@ -54,56 +83,19 @@ public class PronunciationService {
                     .POST(HttpRequest.BodyPublishers.ofByteArray(audio.getBytes()))
                     .build();
 
-            HttpClient client = HttpClient.newHttpClient();
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new RuntimeException("Azure Speech API error: " + response.statusCode() + "body: " + response.body());
             }
 
-            return mapAzureResponse(response.body(), referenceText);
-
+            return mapAzureResponse(response.body());
         } catch (Exception e) {
             throw new RuntimeException("Failed to call Azure Speech API: ", e);
         }
-
-//        SpeechEvaluateResponse response = new SpeechEvaluateResponse();
-//        SentenceScores sentenceScores = new SentenceScores();
-//        sentenceScores.setAccuracy(80);
-//        sentenceScores.setFluency(72);
-//        sentenceScores.setCompleteness(90);
-//        sentenceScores.setProsody(68);
-//
-//        WordResult wordResult = new WordResult();
-//        wordResult.setWord("want");
-//        wordResult.setScores(Map.of("accuracy", 82));
-//        wordResult.setErrorType("MisPronunciation");
-//        wordResult.setOffset(1200000L);
-//        wordResult.setDuration(350000L);
-//
-//        PhonemeResult phonemeResult = new PhonemeResult();
-//        phonemeResult.setWord("Want");
-//        phonemeResult.setPhoneme("ɑː");
-//        phonemeResult.setScores(Map.of("accuracy", 70));
-//        phonemeResult.setExpectedIpa("ɑː");
-//        phonemeResult.setCandidates(List.of("ɑː", "ʌ"));
-//        phonemeResult.setOffset(1450000L);
-//        phonemeResult.setDuration(120000L);
-//
-//        response.setTranscript("I want to improve my English speaking.");
-//        response.setOverallScore(78);
-//        response.setSentenceScores(sentenceScores);
-//        response.setWords(List.of(wordResult));
-//        response.setPhonemes(List.of(phonemeResult));
-//        response.setExtras(Map.of("someUnmappedField", "example"));
-//        response.setRawJson(Map.of());
-//
-//        return response;
     }
 
     private String buildPronunciationAssessmentJson(String referenceText) throws JsonProcessingException {
-        ObjectMapper objectMapper = new ObjectMapper();
-
-        Map<String, Object> pa = new LinkedHashMap<>();
+        var pa = new LinkedHashMap<String, Object>();
         pa.put("ReferenceText", referenceText);
         pa.put("GradingSystem", "HundredMark");
         pa.put("Granularity", "Phoneme");
@@ -116,28 +108,143 @@ public class PronunciationService {
         return objectMapper.writeValueAsString(pa);
     }
 
-    private SpeechEvaluateResponse mapAzureResponse(String responseBody, String referencetext) throws JsonProcessingException {
-        ObjectMapper objectMapper = new ObjectMapper();
-        JsonNode root = objectMapper.readTree(responseBody);
+    private SpeechEvaluateResponse mapAzureResponse(String responseBody) throws JsonProcessingException {
+        var root = objectMapper.readTree(responseBody);
 
-        SpeechEvaluateResponse response = new SpeechEvaluateResponse();
-        response.setRawJson(responseBody);
+        var response = new SpeechEvaluateResponse();
+        response.setRawJson(objectMapper.convertValue(root, Object.class));
         System.out.println(responseBody);
 
-        JsonNode nbest0 = root.path("NBest").isArray() && root.path("NBest").size() > 0 ? root.path("NBest").get(0) : null;
-
-        if (nbest0 != null) {
-            response.setTranscript(nbest0.path("Display").asText(""));
-
-            SentenceScores sentenceScores = new SentenceScores();
-            sentenceScores.setAccuracy((int) Math.round(nbest0.path("AccuracyScore").asDouble(0)));
-            sentenceScores.setFluency((int) Math.round(nbest0.path("FluencyScore").asDouble(0)));
-            sentenceScores.setCompleteness((int) Math.round(nbest0.path("CompletenessScore").asDouble(0)));
-            sentenceScores.setProsody((int) Math.round(nbest0.path("ProsodyScore").asDouble(0)));
-            sentenceScores.setPron((int) Math.round(nbest0.path("PronScore").asDouble(0)));
-            response.setSentenceScores(sentenceScores);
+        var nbest0 = getFirstNBest(root);
+        if (nbest0 == null) {
+            return response;
         }
 
+        response.setTranscript(nbest0.path(DISPLAY).asText(""));
+        response.setSentenceScores(mapSentenceScores(nbest0));
+        response.setWords(mapWords(nbest0));
+        response.setPhonemes(mapPhonemes(nbest0));
+
         return response;
+    }
+
+    private JsonNode getFirstNBest(JsonNode root) {
+        var nBestNodes = root.path(N_BEST);
+        if (!nBestNodes.isArray() || nBestNodes.isEmpty()) {
+            return null;
+        }
+        return nBestNodes.get(0);
+    }
+
+    private SentenceScores mapSentenceScores(JsonNode nbest0) {
+        var sentenceScores = new SentenceScores();
+        sentenceScores.setAccuracy((int) Math.round(nbest0.path(ACCURACY_SCORE).asDouble(0)));
+        sentenceScores.setFluency((int) Math.round(nbest0.path(FLUENCY_SCORE).asDouble(0)));
+        sentenceScores.setCompleteness((int) Math.round(nbest0.path(COMPLETENESS_SCORE).asDouble(0)));
+        sentenceScores.setProsody((int) Math.round(nbest0.path(PROSODY_SCORE).asDouble(0)));
+        sentenceScores.setPron((int) Math.round(nbest0.path(PRON_SCORE).asDouble(0)));
+        return sentenceScores;
+    }
+
+    private List<WordResult> mapWords(JsonNode nbest0) {
+        var words = new ArrayList<WordResult>();
+        var wordNodes = nbest0.path(WORDS);
+
+        if (!wordNodes.isArray()) {
+            return words;
+        }
+
+        for (var wordNode : wordNodes) {
+            var wordResult = new WordResult();
+            wordResult.setWord(wordNode.path(WORD).asText(""));
+            wordResult.setErrorType(wordNode.path(ERROR_TYPE).asText(""));
+            wordResult.setOffset(longOrNull(wordNode.get(OFFSET)));
+            wordResult.setDuration(longOrNull(wordNode.get(DURATION)));
+
+            var wordScores = new LinkedHashMap<String, Object>();
+            putIfPresent(wordScores, WORD_ACCURACY_SCORE_KEY, doubleOrNull(wordNode.get(ACCURACY_SCORE)));
+            wordResult.setScores(wordScores);
+
+            words.add(wordResult);
+        }
+
+        return words;
+    }
+
+    private List<PhonemeResult> mapPhonemes(JsonNode nbest0) {
+        var phonemes = new ArrayList<PhonemeResult>();
+        var wordNodes = nbest0.path(WORDS);
+
+        if (!wordNodes.isArray()) {
+            return phonemes;
+        }
+
+        for (var wordNode : wordNodes) {
+            var phonemeNodes = wordNode.path(PHONEMES);
+            if (!phonemeNodes.isArray()) {
+                continue;
+            }
+
+            var word = wordNode.path(WORD).asText("");
+            for (var phonemeNode : phonemeNodes) {
+                var phonemeResult = new PhonemeResult();
+                var phoneme = phonemeNode.path(PHONEME).asText("");
+
+                phonemeResult.setWord(word);
+                phonemeResult.setPhoneme(phoneme);
+                phonemeResult.setExpectedIpa(phoneme);
+                phonemeResult.setOffset(longOrNull(phonemeNode.get(OFFSET)));
+                phonemeResult.setDuration(longOrNull(phonemeNode.get(DURATION)));
+
+                var phonemeScores = new LinkedHashMap<String, Object>();
+                putIfPresent(phonemeScores, WORD_ACCURACY_SCORE_KEY, doubleOrNull(phonemeNode.get(ACCURACY_SCORE)));
+
+                var candidates = new ArrayList<String>();
+                var nBestPhonemes = phonemeNode.path(N_BEST_PHONEMES);
+                if (nBestPhonemes.isArray()) {
+                    for (int i = 0; i < Math.min(nBestPhonemes.size(), 2); i++) {
+                        var candidateNode = nBestPhonemes.get(i);
+
+                        var candidatePhoneme = candidateNode.path(PHONEME).asText("");
+                        if (!candidatePhoneme.isBlank()) {
+                            candidates.add(candidatePhoneme);
+                        }
+
+                        if (i == 0) {
+                            putIfPresent(phonemeScores, CANDIDATE_1_SCORE_KEY, doubleOrNull(candidateNode.get(SCORE)));
+                        } else if (i == 1) {
+                            putIfPresent(phonemeScores, CANDIDATE_2_SCORE_KEY, doubleOrNull(candidateNode.get(SCORE)));
+                        }
+                    }
+                }
+
+                phonemeResult.setCandidates(candidates);
+                phonemeResult.setScores(phonemeScores);
+
+                phonemes.add(phonemeResult);
+            }
+        }
+
+        return phonemes;
+    }
+
+    private void putIfPresent(Map<String, Object> target, String key, Object value) {
+        if (value != null) {
+            target.put(key, value);
+        }
+    }
+
+    private Double doubleOrNull(JsonNode node) {
+        if (node == null || node.isNull() || !node.isNumber()) {
+            return null;
+        }
+        return node.asDouble();
+    }
+
+    private Long longOrNull(JsonNode node) {
+        if (node == null || node.isNull() || !node.isNumber()) {
+            return null;
+        }
+        return node.asLong();
     }
 }
