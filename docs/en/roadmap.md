@@ -88,8 +88,15 @@ Turn the PoC into a minimally usable product.
 - Store evaluation results in a database
 - Manage multiple practice sentences (DB)
 - Display evaluation results in a well-organized single screen
-- Add a simple login screen (if needed)
+- Use a browser-local UUID stored in localStorage as the Phase 1 user_id
+- Keep Phase 1 authentication-free
 - Switch result display based on Azure `RecognitionStatus`
+
+### Notes
+
+- In Phase 1, user data is separated by a browser-local UUID
+- Cross-device sync is not supported in Phase 1
+- Full authentication is deferred to Phase 2
 
 ---
 
