@@ -62,28 +62,27 @@ For details:
 
 ## Current Status
 
-Currently working on Phase 0 (PoC):
+### Phase 0 — Completed
 
 - Azure Speech pronunciation assessment API integrated in backend
+- ElevenLabs TTS API integrated for sample voice generation
+- Sample voice playback implemented in frontend
 - Key pronunciation assessment fields displayed in frontend
-- ElevenLabs API connectivity validated via curl
 - Word-level and phoneme-level response mapping implemented
 - Raw Azure JSON viewer implemented
+- Basic error handling implemented for Azure Speech and ElevenLabs
 
-Current PoC scope:
+PoC scope delivered:
 
 - transcript display
-- overall score display (using Azure PronScore)
+- overall score display using Azure PronScore
 - sentence-level scores
 - word-level breakdown
 - phoneme-level breakdown
 - first / second phoneme candidates with scores
 - raw Azure JSON viewer
-
-Notes:
-
-- Browser recording / wav generation is not required in Phase 0
-- That flow is deferred to MVP
+- sample voice playback with a custom audio player
+- user-friendly error messages for basic API failures
 
 ---
 

@@ -43,8 +43,8 @@ Displayed data:
 
 - Call the API only when the "Generate Sample Audio" button is pressed
 - Retrieve generated sample audio
-- Play audio via the "Play Sample Audio" button
-- Display ElevenLabs API response (excluding audio binary data)
+- Play generated sample audio in the frontend
+- Display a user-friendly error message when audio generation fails
 
 ---
 
@@ -71,7 +71,7 @@ Displayed data:
 - Raw Azure response can be inspected
 - ElevenLabs successfully generates audio
 - Generated audio can be played back
-- Raw ElevenLabs response can be inspected
+- Basic error handling is implemented for Azure Speech and ElevenLabs
 
 ---
 
