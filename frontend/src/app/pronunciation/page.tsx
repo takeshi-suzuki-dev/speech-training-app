@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { scorePronunciation } from "@/lib/api/pronunciation";
+import { useRef, useState } from "react";
+import {
+  generateSampleSpeech,
+  scorePronunciation,
+} from "@/lib/api/pronunciation";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
 
 const scoreColor = (score: number) => {
@@ -21,14 +24,94 @@ const errorChipClass = (errorType: string) => {
   return "bg-gray-100 text-gray-500 border border-gray-200";
 };
 
+const formatTime = (sec: number) => {
+  if (!isFinite(sec)) return "0:00";
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+};
+
 export default function PronunciationPage() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [referenceText, setReferenceText] = useState("There, It's all done.");
+  const [referenceText, setReferenceText] = useState(
+    "Hi, There. It's all done.",
+  );
   const [result, setResult] = useState<SpeechEvaluateResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [ttsLoading, setTtsLoading] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [expandedWord, setExpandedWord] = useState<number | null>(null);
   const [rawJsonOpen, setRawJsonOpen] = useState(false);
+
+  // Audio player state
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  const togglePlay = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (isPlaying) {
+      el.pause();
+    } else {
+      el.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleTimeUpdate = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    setCurrentTime(el.currentTime);
+  };
+
+  const handleLoadedMetadata = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    setDuration(el.duration);
+  };
+
+  const handleEnded = () => setIsPlaying(false);
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const el = audioRef.current;
+    if (!el) return;
+    const val = Number(e.target.value);
+    el.currentTime = val;
+    setCurrentTime(val);
+  };
+
+  const handleGenerateSampleSpeech = async () => {
+    if (!referenceText.trim()) {
+      setErrorMessage("Please enter reference text.");
+      return;
+    }
+
+    try {
+      setTtsLoading(true);
+      setErrorMessage("");
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
+
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+      const blob = await generateSampleSpeech(referenceText);
+      const url = URL.createObjectURL(blob);
+      setAudioUrl(url);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to generateSampleAudio.",
+      );
+    } finally {
+      setTtsLoading(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!audioFile) {
@@ -62,6 +145,8 @@ export default function PronunciationPage() {
   const words = result?.words ?? [];
   const sentenceScores = result?.sentenceScores;
 
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
   return (
     <main className="min-h-screen bg-gray-50 text-gray-800">
       <div className="mx-auto max-w-2xl px-4 py-8">
@@ -78,13 +163,52 @@ export default function PronunciationPage() {
         {/* Input */}
         <div className="rounded-xl border border-gray-200 bg-white p-4 mb-4 shadow-sm">
           <div className="flex flex-col gap-3">
-            <div>
-              <label
-                htmlFor="referenceText"
-                className="block text-xs font-semibold text-gray-600 mb-1"
-              >
-                Reference Text
-              </label>
+            {/* Reference text */}
+            <div className="flex flex-col gap-2">
+              {/* Label row with Generate button */}
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="referenceText"
+                  className="text-xs font-semibold text-gray-600"
+                >
+                  Reference Text
+                </label>
+                <button
+                  onClick={handleGenerateSampleSpeech}
+                  disabled={ttsLoading}
+                  className="flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {ttsLoading ? (
+                    <>
+                      <svg
+                        className="animate-spin"
+                        width="11"
+                        height="11"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                      >
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                      </svg>
+                      Generating…
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        width="11"
+                        height="11"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                      </svg>
+                      Generate sample voice
+                    </>
+                  )}
+                </button>
+              </div>
+
               <textarea
                 id="referenceText"
                 value={referenceText}
@@ -93,11 +217,81 @@ export default function PronunciationPage() {
                 placeholder="I want to improve my pronunciation..."
                 className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 placeholder-gray-300 outline-none transition focus:border-gray-400 focus:bg-white resize-none"
               />
+
+              {/* Custom audio player */}
+              {audioUrl && (
+                <>
+                  {/* Hidden native audio for playback logic */}
+                  <audio
+                    ref={audioRef}
+                    src={audioUrl}
+                    onTimeUpdate={handleTimeUpdate}
+                    onLoadedMetadata={handleLoadedMetadata}
+                    onEnded={handleEnded}
+                    className="hidden"
+                  />
+
+                  <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                    {/* Play/Pause */}
+                    <button
+                      onClick={togglePlay}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white transition hover:bg-gray-700"
+                      aria-label={isPlaying ? "Pause" : "Play"}
+                    >
+                      {isPlaying ? (
+                        <svg
+                          width="9"
+                          height="9"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <rect x="6" y="4" width="4" height="16" />
+                          <rect x="14" y="4" width="4" height="16" />
+                        </svg>
+                      ) : (
+                        <svg
+                          width="9"
+                          height="9"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <polygon points="5 3 19 12 5 21 5 3" />
+                        </svg>
+                      )}
+                    </button>
+
+                    {/* Progress bar */}
+                    <div className="relative flex-1 h-1.5 rounded-full bg-gray-200">
+                      <div
+                        className="absolute left-0 top-0 h-full rounded-full bg-gray-700 transition-all"
+                        style={{ width: `${progress}%` }}
+                      />
+                      <input
+                        type="range"
+                        min={0}
+                        max={duration || 100}
+                        step={0.01}
+                        value={currentTime}
+                        onChange={handleSeek}
+                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                      />
+                    </div>
+
+                    {/* Time */}
+                    <span className="shrink-0 font-mono text-[0.65rem] text-gray-500 tabular-nums">
+                      {formatTime(currentTime)}{" "}
+                      <span className="text-gray-300">/</span>{" "}
+                      {formatTime(duration)}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
 
+            {/* File picker + Score */}
             <div className="flex items-center gap-3">
               <label
-                className={`flex-1 flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition
+                className={`flex-1 flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition
                 ${audioFile ? "border-gray-300 bg-gray-50 text-gray-700" : "border-dashed border-gray-200 text-gray-400 hover:border-gray-300"}`}
               >
                 <input
@@ -115,7 +309,7 @@ export default function PronunciationPage() {
               <button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="shrink-0 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                className="shrink-0 rounded-lg bg-gray-900 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {loading ? "Scoring..." : "Score →"}
               </button>
@@ -135,7 +329,7 @@ export default function PronunciationPage() {
             {/* Summary */}
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
               <div className="flex items-start gap-6">
-                {/* Overall score — label removed, number speaks for itself */}
+                {/* Overall score */}
                 <div className="shrink-0">
                   <span
                     className={`text-4xl font-bold font-mono leading-none ${scoreColor(sentenceScores?.pron ?? 0)}`}

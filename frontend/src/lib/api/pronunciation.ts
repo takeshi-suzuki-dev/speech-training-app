@@ -1,5 +1,19 @@
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
 
+export async function generateSampleSpeech(text: string): Promise<Blob> {
+  const response = await fetch("http://localhost:8080/api/tts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`TTS Request failed: ${response.status}`);
+  }
+
+  return response.blob();
+}
+
 export async function scorePronunciation(
   audioFile: File,
   referencetext: string,
@@ -17,7 +31,7 @@ export async function scorePronunciation(
   );
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    throw new Error(`Score Request failed: ${response.status}`);
   }
 
   return response.json();
