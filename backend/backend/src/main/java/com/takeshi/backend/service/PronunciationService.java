@@ -7,6 +7,7 @@ import com.takeshi.backend.dto.response.PhonemeResult;
 import com.takeshi.backend.dto.response.SentenceScores;
 import com.takeshi.backend.dto.response.SpeechEvaluateResponse;
 import com.takeshi.backend.dto.response.WordResult;
+import com.takeshi.backend.exception.AzureSpeechApiException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -85,10 +86,15 @@ public class PronunciationService {
 
             var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new RuntimeException("Azure Speech API error: " + response.statusCode() + "body: " + response.body());
+                throw new AzureSpeechApiException(
+                        response.statusCode(),
+                        "Azure Speech API error: " + response.statusCode()
+                );
             }
 
             return mapAzureResponse(response.body());
+        } catch (AzureSpeechApiException e) {
+            throw e;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Failed to call Azure Speech API: ", e);
@@ -117,6 +123,8 @@ public class PronunciationService {
         var response = new SpeechEvaluateResponse();
         response.setRawJson(objectMapper.convertValue(root, Object.class));
         System.out.println(responseBody);
+
+        response.setRecognitionStatus(root.path("RecognitionStatus").asText(null));
 
         var nbest0 = getFirstNBest(root);
         if (nbest0 == null) {

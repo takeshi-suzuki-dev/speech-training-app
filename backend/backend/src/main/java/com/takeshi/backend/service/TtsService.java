@@ -1,8 +1,10 @@
 package com.takeshi.backend.service;
 
+import com.takeshi.backend.exception.ElevenLabsApiException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
@@ -14,7 +16,7 @@ public class TtsService {
     @Value("${elevenlabs.voice-id}")
     private String voiceId;
 
-    private final RestTemplate restTemplete = new RestTemplate();
+    private final RestTemplate restTemplate = new RestTemplate();
 
     public byte[] generate(String text) {
         String url = "https://api.elevenlabs.io/v1/text-to-speech/" + voiceId;
@@ -31,13 +33,17 @@ public class TtsService {
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
-        ResponseEntity<byte[]> response = restTemplete.exchange(
-                url,
-                HttpMethod.POST,
-                request,
-                byte[].class
-        );
+        try {
+            ResponseEntity<byte[]> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    request,
+                    byte[].class
+            );
 
-        return response.getBody();
+            return response.getBody();
+        } catch (HttpStatusCodeException e) {
+            throw new ElevenLabsApiException(e.getStatusCode().value());
+        }
     }
 }

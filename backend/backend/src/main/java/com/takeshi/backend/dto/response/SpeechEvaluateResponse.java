@@ -4,6 +4,7 @@ import java.util.List;
 
 public class SpeechEvaluateResponse {
     private String transcript;
+    private String recognitionStatus;
     private SentenceScores sentenceScores;
     private List<WordResult> words;
     private List<PhonemeResult> phonemes;
@@ -15,6 +16,14 @@ public class SpeechEvaluateResponse {
 
     public void setTranscript(String transcript) {
         this.transcript = transcript;
+    }
+
+    public String getRecognitionStatus() {
+        return recognitionStatus;
+    }
+
+    public void setRecognitionStatus(String recognitionStatus) {
+        this.recognitionStatus = recognitionStatus;
     }
 
     public SentenceScores getSentenceScores() {
