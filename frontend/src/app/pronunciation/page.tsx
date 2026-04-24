@@ -31,6 +31,36 @@ const formatTime = (sec: number) => {
   return `${m}:${s.toString().padStart(2, "0")}`;
 };
 
+function getRecognitionStatusMessage(status?: string): string | null {
+  switch (status) {
+    case "Success":
+      return null;
+    case "NoMatch":
+      return "Speech could not be recognized. Please try again.";
+    case "InitialSilenceTimeout":
+      return "No speech detected at the beginning. Please start speaking earlier.";
+    case "BabbleTimeout":
+      return "Audio was unclear or too noisy. Please try again in a quieter environment.";
+    case "Error":
+      return "An error occurred in Azure Speech. Please try again later.";
+    default:
+      return status ? `Unexpected recognition result: ${status}` : null;
+  }
+}
+
+function isEffectivelyNoSpeech(result: SpeechEvaluateResponse): boolean {
+  const words = result.words ?? [];
+  const allOmitted =
+    words.length > 0 && words.every((word) => word.errorType === "Omission");
+
+  return (
+    result.recognitionStatus === "Success" &&
+    result.transcript?.trim() === "." &&
+    result.sentenceScores?.pron === 0 &&
+    allOmitted
+  );
+}
+
 export default function PronunciationPage() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [referenceText, setReferenceText] = useState(
@@ -106,7 +136,7 @@ export default function PronunciationPage() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Failed to generateSampleAudio.",
+          : "Failed to generate sample audio.",
       );
     } finally {
       setTtsLoading(false);
@@ -116,10 +146,12 @@ export default function PronunciationPage() {
   const handleSubmit = async () => {
     if (!audioFile) {
       setErrorMessage("Please select an audio file.");
+      setResult(null);
       return;
     }
     if (!referenceText.trim()) {
       setErrorMessage("Please enter reference text.");
+      setResult(null);
       return;
     }
     try {
@@ -129,7 +161,11 @@ export default function PronunciationPage() {
       setResult(response);
       setExpandedWord(null);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unknown error");
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to evaluate pronunciation.",
+      );
     } finally {
       setLoading(false);
     }
@@ -142,9 +178,26 @@ export default function PronunciationPage() {
     );
   };
 
+  const handleMockNoMatch = () => {
+    setResult({
+      recognitionStatus: "NoMatch",
+      overallScore: 0,
+      transcript: "",
+      sentenceScores: {
+        accuracy: 0,
+        fluency: 0,
+        completeness: 0,
+        prosody: 0,
+        pron: 0,
+      },
+      words: [],
+      phonemes: [],
+      rawJson: { RecognitionStatus: "NoMatch" },
+    });
+  };
+
   const words = result?.words ?? [];
   const sentenceScores = result?.sentenceScores;
-
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
@@ -221,7 +274,6 @@ export default function PronunciationPage() {
               {/* Custom audio player */}
               {audioUrl && (
                 <>
-                  {/* Hidden native audio for playback logic */}
                   <audio
                     ref={audioRef}
                     src={audioUrl}
@@ -230,7 +282,6 @@ export default function PronunciationPage() {
                     onEnded={handleEnded}
                     className="hidden"
                   />
-
                   <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
                     {/* Play/Pause */}
                     <button
@@ -289,7 +340,7 @@ export default function PronunciationPage() {
             </div>
 
             {/* File picker + Score */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <label
                 className={`flex-1 flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition
                 ${audioFile ? "border-gray-300 bg-gray-50 text-gray-700" : "border-dashed border-gray-200 text-gray-400 hover:border-gray-300"}`}
@@ -309,9 +360,16 @@ export default function PronunciationPage() {
               <button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="shrink-0 rounded-lg bg-gray-900 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                className="shrink-0 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {loading ? "Scoring..." : "Score →"}
+              </button>
+
+              <button
+                onClick={handleMockNoMatch}
+                className="shrink-0 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-500 transition hover:border-gray-300 hover:text-gray-700"
+              >
+                Mock NoMatch
               </button>
             </div>
 
@@ -323,248 +381,267 @@ export default function PronunciationPage() {
           </div>
         </div>
 
-        {/* Results */}
-        {result && (
-          <div className="flex flex-col gap-3">
-            {/* Summary */}
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start gap-6">
-                {/* Overall score */}
-                <div className="shrink-0">
-                  <span
-                    className={`text-4xl font-bold font-mono leading-none ${scoreColor(sentenceScores?.pron ?? 0)}`}
-                  >
-                    {sentenceScores?.pron}
-                  </span>
-                  <span className="text-sm text-gray-400 ml-0.5">/100</span>
-                </div>
-
-                <div className="h-10 w-px bg-gray-200 shrink-0 self-center" />
-
-                {/* Sentence scores */}
-                <div className="grid grid-cols-4 gap-4 flex-1">
-                  {[
-                    {
-                      label: "Accuracy",
-                      value: sentenceScores?.accuracy ?? 0,
-                    },
-                    { label: "Fluency", value: sentenceScores?.fluency ?? 0 },
-                    {
-                      label: "Completeness",
-                      value: result.sentenceScores.completeness,
-                    },
-                    { label: "Prosody", value: sentenceScores?.prosody ?? 0 },
-                  ].map(({ label, value }) => (
-                    <div key={label}>
-                      <p className="text-[0.6rem] font-semibold uppercase tracking-widest text-gray-500 mb-0.5">
-                        {label}
-                      </p>
-                      <p
-                        className={`text-lg font-bold font-mono leading-none ${scoreColor(value)}`}
-                      >
-                        {value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <p className="mt-3 text-xs text-gray-500 font-mono border-t border-gray-100 pt-3">
-                {result.transcript}
-              </p>
-            </div>
-
-            {/* Words */}
-            {words.length > 0 && (
-              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-gray-100">
-                  <p className="text-[0.6rem] font-semibold uppercase tracking-widest text-gray-500">
-                    Word-level Breakdown
-                  </p>
-                </div>
-
-                <div className="divide-y divide-gray-100">
-                  {words.map((wordResult, index) => {
-                    const isOpen = expandedWord === index;
-                    const phonemes = getPhonemesByWord(wordResult.word);
-
-                    return (
-                      <div key={`${wordResult.word}-${index}`}>
-                        <button
-                          className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 transition"
-                          onClick={() => setExpandedWord(isOpen ? null : index)}
-                        >
-                          <span className="w-20 shrink-0 font-mono text-sm font-medium text-gray-800">
-                            {wordResult.word}
-                          </span>
-
-                          <span
-                            className={`shrink-0 rounded-md px-2 py-0.5 text-[0.62rem] font-medium ${errorChipClass(wordResult.errorType ?? "")}`}
-                          >
-                            {wordResult.errorType || "None"}
-                          </span>
-
-                          <div className="ml-auto flex gap-5">
-                            {Object.entries(wordResult.scores ?? {})
-                              .slice(0, 3)
-                              .map(([key, val]) => (
-                                <div key={key} className="text-right">
-                                  <div className="text-[0.58rem] font-semibold uppercase tracking-widest text-gray-500">
-                                    {key.replace(/score/i, "")}
-                                  </div>
-                                  <div
-                                    className={`font-mono text-sm font-bold ${scoreColor(Number(val))}`}
-                                  >
-                                    {Number(val)}
-                                  </div>
-                                </div>
-                              ))}
-                          </div>
-
-                          <svg
-                            className={`ml-3 shrink-0 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                            width="13"
-                            height="13"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                          >
-                            <polyline points="6 9 12 15 18 9" />
-                          </svg>
-                        </button>
-
-                        {isOpen && (
-                          <div className="border-t border-gray-100 bg-gray-50 px-4 py-3">
-                            {phonemes.length > 0 ? (
-                              <table className="w-full text-xs font-mono">
-                                <thead>
-                                  <tr className="border-b border-gray-200">
-                                    {[
-                                      "Phoneme",
-                                      "Expected IPA",
-                                      "Accuracy",
-                                      "1st Candidate",
-                                      "2nd Candidate",
-                                    ].map((h, hi) => (
-                                      <th
-                                        key={`${h}-${hi}`}
-                                        className="pb-1.5 text-left text-[0.58rem] font-semibold uppercase tracking-widest text-gray-500"
-                                      >
-                                        {h}
-                                      </th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {phonemes.map((ph, pi) => {
-                                    const acc = Number(
-                                      ph.scores?.accuracyScore ??
-                                        ph.scores?.accuracy ??
-                                        0,
-                                    );
-                                    const candidate1 =
-                                      ph.candidates?.[0] ?? "-";
-                                    const candidate2 =
-                                      ph.candidates?.[1] ?? "-";
-                                    const candidate1Score = Number(
-                                      ph.scores?.candidate1Score ?? 0,
-                                    );
-                                    const candidate2Score = Number(
-                                      ph.scores?.candidate2Score ?? 0,
-                                    );
-                                    return (
-                                      <tr
-                                        key={`${ph.phoneme}-${pi}`}
-                                        className="border-b border-gray-100 last:border-0"
-                                      >
-                                        <td className="py-1.5 text-sm font-semibold text-gray-800">
-                                          {ph.phoneme}
-                                        </td>
-                                        <td className="py-1.5 italic text-gray-500">
-                                          {ph.expectedIpa}
-                                        </td>
-                                        <td
-                                          className={`py-1.5 font-bold ${scoreColor(acc)}`}
-                                        >
-                                          {acc}
-                                        </td>
-                                        {/* 1st Candidate */}
-                                        <td className="py-1.5">
-                                          <span className="w-28 inline-flex items-center gap-1.5">
-                                            <span className="w-6 rounded bg-gray-200 px-1.5 py-0.5 text-[0.65rem] text-gray-600">
-                                              {candidate1}
-                                            </span>
-                                            <span
-                                              className={`font-bold px-1.5 py-0.5  ${scoreColor(candidate1Score)}`}
-                                            >
-                                              {candidate1Score || "-"}
-                                            </span>
-                                          </span>
-                                        </td>
-                                        {/* 2nd Candidate */}
-                                        <td className="py-1.5">
-                                          <span className="w-28 inline-flex items-center gap-1.5">
-                                            <span className="w-6 rounded bg-gray-200 px-1.5 py-0.5 text-[0.65rem] text-gray-600">
-                                              {candidate2}
-                                            </span>
-                                            <span
-                                              className={`font-bold px-1.5 py-0.5  ${scoreColor(candidate2Score)}`}
-                                            >
-                                              {candidate2Score || "-"}
-                                            </span>
-                                          </span>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            ) : (
-                              <p className="text-xs italic text-gray-500">
-                                No phoneme data available for this word.
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Raw JSON */}
-            {result?.rawJson != null && (
-              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                <button
-                  className="flex w-full items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition"
-                  onClick={() => setRawJsonOpen((prev) => !prev)}
-                >
-                  <p className="text-[0.6rem] font-semibold uppercase tracking-widest text-gray-500">
-                    Raw JSON
-                  </p>
-                  <svg
-                    className={`text-gray-400 transition-transform ${rawJsonOpen ? "rotate-180" : ""}`}
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </button>
-                {rawJsonOpen && (
-                  <pre className="overflow-x-auto border-t border-gray-100 bg-gray-50 px-4 py-3 text-[11px] leading-5 text-gray-700">
-                    {JSON.stringify(result.rawJson, null, 2)}
-                  </pre>
-                )}
-              </div>
-            )}
+        {/* Warning banner: recognition failed */}
+        {result && result?.recognitionStatus !== "Success" && (
+          <div className="mt-4 rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
+            {getRecognitionStatusMessage(result?.recognitionStatus)}
           </div>
         )}
+
+        {/* Warning banner: effectively no speech */}
+        {result &&
+          result.recognitionStatus === "Success" &&
+          isEffectivelyNoSpeech(result) && (
+            <div className="mt-4 rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
+              Almost no speech was recognized. Please try recording again.
+            </div>
+          )}
+
+        {/* Results */}
+        {result &&
+          result.recognitionStatus === "Success" &&
+          !isEffectivelyNoSpeech(result) && (
+            <div className="flex flex-col gap-3">
+              {/* Summary */}
+              <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start gap-6">
+                  {/* Overall score */}
+                  <div className="shrink-0">
+                    <span
+                      className={`text-4xl font-bold font-mono leading-none ${scoreColor(sentenceScores?.pron ?? 0)}`}
+                    >
+                      {sentenceScores?.pron}
+                    </span>
+                    <span className="text-sm text-gray-400 ml-0.5">/100</span>
+                  </div>
+
+                  <div className="h-10 w-px bg-gray-200 shrink-0 self-center" />
+
+                  {/* Sentence scores */}
+                  <div className="grid grid-cols-4 gap-4 flex-1">
+                    {[
+                      {
+                        label: "Accuracy",
+                        value: sentenceScores?.accuracy ?? 0,
+                      },
+                      { label: "Fluency", value: sentenceScores?.fluency ?? 0 },
+                      {
+                        label: "Completeness",
+                        value: sentenceScores?.completeness ?? 0,
+                      },
+                      { label: "Prosody", value: sentenceScores?.prosody ?? 0 },
+                    ].map(({ label, value }) => (
+                      <div key={label}>
+                        <p className="text-[0.6rem] font-semibold uppercase tracking-widest text-gray-500 mb-0.5">
+                          {label}
+                        </p>
+                        <p
+                          className={`text-lg font-bold font-mono leading-none ${scoreColor(value)}`}
+                        >
+                          {value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <p className="mt-3 text-xs text-gray-500 font-mono border-t border-gray-100 pt-3">
+                  {result.transcript}
+                </p>
+              </div>
+
+              {/* Words */}
+              {words.length > 0 && (
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-gray-100">
+                    <p className="text-[0.6rem] font-semibold uppercase tracking-widest text-gray-500">
+                      Word-level Breakdown
+                    </p>
+                  </div>
+
+                  <div className="divide-y divide-gray-100">
+                    {words.map((wordResult, index) => {
+                      const isOpen = expandedWord === index;
+                      const phonemes = getPhonemesByWord(wordResult.word);
+
+                      return (
+                        <div key={`${wordResult.word}-${index}`}>
+                          <button
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 transition"
+                            onClick={() =>
+                              setExpandedWord(isOpen ? null : index)
+                            }
+                          >
+                            <span className="w-20 shrink-0 font-mono text-sm font-medium text-gray-800">
+                              {wordResult.word}
+                            </span>
+
+                            <span
+                              className={`shrink-0 rounded-md px-2 py-0.5 text-[0.62rem] font-medium ${errorChipClass(wordResult.errorType ?? "")}`}
+                            >
+                              {wordResult.errorType || "None"}
+                            </span>
+
+                            <div className="ml-auto flex gap-5">
+                              {Object.entries(wordResult.scores ?? {})
+                                .slice(0, 3)
+                                .map(([key, val]) => (
+                                  <div key={key} className="text-right">
+                                    <div className="text-[0.58rem] font-semibold uppercase tracking-widest text-gray-500">
+                                      {key.replace(/score/i, "")}
+                                    </div>
+                                    <div
+                                      className={`font-mono text-sm font-bold ${scoreColor(Number(val))}`}
+                                    >
+                                      {Number(val)}
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+
+                            <svg
+                              className={`ml-3 shrink-0 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                              width="13"
+                              height="13"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                            >
+                              <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                          </button>
+
+                          {isOpen && (
+                            <div className="border-t border-gray-100 bg-gray-50 px-4 py-3">
+                              {phonemes.length > 0 ? (
+                                <table className="w-full text-xs font-mono">
+                                  <thead>
+                                    <tr className="border-b border-gray-200">
+                                      {[
+                                        "Phoneme",
+                                        "Expected IPA",
+                                        "Accuracy",
+                                        "1st Candidate",
+                                        "2nd Candidate",
+                                      ].map((h, hi) => (
+                                        <th
+                                          key={`${h}-${hi}`}
+                                          className="pb-1.5 text-left text-[0.58rem] font-semibold uppercase tracking-widest text-gray-500"
+                                        >
+                                          {h}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {phonemes.map((ph, pi) => {
+                                      const acc = Number(
+                                        ph.scores?.accuracyScore ??
+                                          ph.scores?.accuracy ??
+                                          0,
+                                      );
+                                      const candidate1 =
+                                        ph.candidates?.[0] ?? "-";
+                                      const candidate2 =
+                                        ph.candidates?.[1] ?? "-";
+                                      const candidate1Score = Number(
+                                        ph.scores?.candidate1Score ?? 0,
+                                      );
+                                      const candidate2Score = Number(
+                                        ph.scores?.candidate2Score ?? 0,
+                                      );
+
+                                      return (
+                                        <tr
+                                          key={`${ph.phoneme}-${pi}`}
+                                          className="border-b border-gray-100 last:border-0"
+                                        >
+                                          <td className="py-1.5 text-sm font-semibold text-gray-800">
+                                            {ph.phoneme}
+                                          </td>
+                                          <td className="py-1.5 italic text-gray-500">
+                                            {ph.expectedIpa}
+                                          </td>
+                                          <td
+                                            className={`py-1.5 font-bold ${scoreColor(acc)}`}
+                                          >
+                                            {acc}
+                                          </td>
+                                          <td className="py-1.5">
+                                            <span className="w-28 inline-flex items-center gap-1.5">
+                                              <span className="w-6 rounded bg-gray-200 px-1.5 py-0.5 text-[0.65rem] text-gray-600">
+                                                {candidate1}
+                                              </span>
+                                              <span
+                                                className={`font-bold px-1.5 py-0.5 ${scoreColor(candidate1Score)}`}
+                                              >
+                                                {candidate1Score || "-"}
+                                              </span>
+                                            </span>
+                                          </td>
+                                          <td className="py-1.5">
+                                            <span className="w-28 inline-flex items-center gap-1.5">
+                                              <span className="w-6 rounded bg-gray-200 px-1.5 py-0.5 text-[0.65rem] text-gray-600">
+                                                {candidate2}
+                                              </span>
+                                              <span
+                                                className={`font-bold px-1.5 py-0.5 ${scoreColor(candidate2Score)}`}
+                                              >
+                                                {candidate2Score || "-"}
+                                              </span>
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              ) : (
+                                <p className="text-xs italic text-gray-500">
+                                  No phoneme data available for this word.
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Raw JSON */}
+              {result?.rawJson != null && (
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <button
+                    className="flex w-full items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition"
+                    onClick={() => setRawJsonOpen((prev) => !prev)}
+                  >
+                    <p className="text-[0.6rem] font-semibold uppercase tracking-widest text-gray-500">
+                      Raw JSON
+                    </p>
+                    <svg
+                      className={`text-gray-400 transition-transform ${rawJsonOpen ? "rotate-180" : ""}`}
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+                  {rawJsonOpen && (
+                    <pre className="overflow-x-auto border-t border-gray-100 bg-gray-50 px-4 py-3 text-[11px] leading-5 text-gray-700">
+                      {JSON.stringify(result.rawJson, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
       </div>
     </main>
   );

@@ -8,7 +8,7 @@ export async function generateSampleSpeech(text: string): Promise<Blob> {
   });
 
   if (!response.ok) {
-    throw new Error(`TTS Request failed: ${response.status}`);
+    throw new Error(getTtsApiErrorMessage(response.status));
   }
 
   return response.blob();
@@ -31,8 +31,40 @@ export async function scorePronunciation(
   );
 
   if (!response.ok) {
-    throw new Error(`Score Request failed: ${response.status}`);
+    throw new Error(getSpeechApiErrorMessage(response.status));
   }
 
   return response.json();
+}
+
+function getSpeechApiErrorMessage(status: number): string {
+  if (status === 400) {
+    return "Invalid request. Please check the audio file and reference text.";
+  }
+  if (status === 401 || status === 403) {
+    return "Speech service authentication failed.";
+  }
+  if (status === 429) {
+    return "Speech service quota or rate limit was reached. Please try again later.";
+  }
+  if (status >= 500) {
+    return "Speech service error. Please try again later.";
+  }
+  return "Failed to evaluate pronunciation. Please try again.";
+}
+
+function getTtsApiErrorMessage(status: number): string {
+  if (status === 400) {
+    return "Invalid text-to-speech request. Please check the text.";
+  }
+  if (status === 401 || status === 403) {
+    return "Text-to-speech service authentication failed.";
+  }
+  if (status === 429) {
+    return "Text-to-speech quota or rate limit was reached. Please try again later.";
+  }
+  if (status >= 500) {
+    return "Text-to-speech service error. Please try again later.";
+  }
+  return "Failed to generate sample audio. Please try again.";
 }

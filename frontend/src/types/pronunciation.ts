@@ -27,6 +27,7 @@ export type PhonemeResult = {
 
 export type SpeechEvaluateResponse = {
   transcript: string;
+  recognitionStatus: string;
   overallScore: number;
   sentenceScores: SentenceScores;
   words: WordResult[];
