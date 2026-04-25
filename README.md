@@ -34,8 +34,15 @@ For details:
 
 ## PoC Specification
 
-- [PoC Spec (EN)](docs/en/poc-spec.md)
+- [PoC Spec (EN)](docs/en/phase0-poc-spec.md)
 - [PoC仕様書 (JP)](docs/jp/Phase0_PoC仕様書.md)
+
+## Phase 1 MVP Specification
+
+- [Phase 1 MVP Spec (EN)](docs/en/phase1-mvp-spec.md)
+- [Phase 1 MVP Spec (JP)](docs/jp/phase1_MVP仕様書.md)
+- [Phase 1 DB / Storage Design (EN)](docs/en/phase1-db-storage-design.md)
+- [Phase 1 DB / ストレージ 設計 (JP)](docs/jp/phase1_DB_ストレージ設計書.md)
 
 ---
 

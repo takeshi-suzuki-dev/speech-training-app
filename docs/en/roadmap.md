@@ -88,15 +88,27 @@ Turn the PoC into a minimally usable product.
 - Store evaluation results in a database
 - Manage multiple practice sentences (DB)
 - Display evaluation results in a well-organized single screen
-- Use a browser-local UUID stored in localStorage as the Phase 1 user_id
+- Use a browser-local identifier as the Phase 1 user_id
 - Keep Phase 1 authentication-free
 - Switch result display based on Azure `RecognitionStatus`
+- Use Supabase PostgreSQL for Phase 1 data persistence
+- Use Supabase Storage for generated reference audio files
+- Implement minimal TTS caching for fixed practice sentences
+- Provide two fixed reference voice buttons: Roger and Sarah (Male / Female)
+- Pre-generate representative demo phrases
+- Generate non-preloaded reference audio on first playback
+- Reuse stored MP3 files instead of calling ElevenLabs on every playback
 
 ### Notes
 
 - In Phase 1, user data is separated by a browser-local UUID
 - Cross-device sync is not supported in Phase 1
 - Full authentication is deferred to Phase 2
+- Reference audio persistence is limited to fixed practice sentences
+- User-recorded audio is not stored in Phase 1
+- User-defined practice sentences are deferred to Phase 2
+- Full audio management, voice selection, regeneration UI, and speed control are deferred to Phase 2
+- The browser-local identifier is implemented as a UUID stored in localStorage
 
 ---
 
@@ -121,6 +133,9 @@ Enhance learning experience and enable continuous usage.
 - Provide advice based on evaluation results
 - Allow users to add custom practice sentences
 - Generate sample audio using ElevenLabs and store it in the database
+- Extend reference audio management for user-defined practice sentences
+- Add full voice management features if needed
+- Add regeneration UI if needed
 - Add recording-time audio level detection and pre-submit checks
 
 ---

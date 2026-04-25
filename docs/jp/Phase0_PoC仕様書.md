@@ -1,4 +1,4 @@
-# Phase 0: PoC 仕様書（確定版）
+# Phase 0: PoC 仕様書
 
 ---
 
