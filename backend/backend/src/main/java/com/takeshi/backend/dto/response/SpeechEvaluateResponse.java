@@ -3,11 +3,12 @@ package com.takeshi.backend.dto.response;
 import java.util.List;
 
 public class SpeechEvaluateResponse {
+
     private String transcript;
     private String recognitionStatus;
     private SentenceScores sentenceScores;
-    private List<WordResult> words;
-    private List<PhonemeResult> phonemes;
+    private List words;
+    private List phonemes;
     private Object rawJson;
 
     public String getTranscript() {
@@ -34,19 +35,19 @@ public class SpeechEvaluateResponse {
         this.sentenceScores = sentenceScores;
     }
 
-    public List<WordResult> getWords() {
+    public List getWords() {
         return words;
     }
 
-    public void setWords(List<WordResult> words) {
+    public void setWords(List words) {
         this.words = words;
     }
 
-    public List<PhonemeResult> getPhonemes() {
+    public List getPhonemes() {
         return phonemes;
     }
 
-    public void setPhonemes(List<PhonemeResult> phonemes) {
+    public void setPhonemes(List phonemes) {
         this.phonemes = phonemes;
     }
 
