@@ -1,10 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import {
-  generateSampleSpeech,
-  scorePronunciation,
-} from "@/lib/api/pronunciation";
+import { scorePronunciation } from "@/lib/api/pronunciationAssessment";
+import { generateSampleSpeech } from "@/lib/api/tts";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
 
 const scoreColor = (score: number) => {
