@@ -9,5 +9,5 @@ import java.util.UUID;
 
 public interface TrainingAttemptRepository extends JpaRepository<TrainingAttempt, UUID> {
 
-    List<TrainingAttempt> findByClientIdOrderByCreatedAtDesc(UUID clientId, Pageable pageable);
+    List<TrainingAttempt> findByClientIdOrderByScoredAtDesc(UUID clientId, Pageable pageable);
 }

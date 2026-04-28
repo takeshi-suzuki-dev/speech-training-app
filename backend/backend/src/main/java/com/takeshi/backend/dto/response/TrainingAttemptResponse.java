@@ -21,6 +21,7 @@ public record TrainingAttemptResponse(
         BigDecimal prosodyScore,
         String wordsJson,
         Integer audioDurationMs,
+        OffsetDateTime scoredAt,
         OffsetDateTime createdAt
 ) {
     public static TrainingAttemptResponse from(TrainingAttempt attempt) {
@@ -39,6 +40,7 @@ public record TrainingAttemptResponse(
                 attempt.getProsodyScore(),
                 attempt.getWordsJson(),
                 attempt.getAudioDurationMs(),
+                attempt.getScoredAt(),
                 attempt.getCreatedAt()
         );
     }

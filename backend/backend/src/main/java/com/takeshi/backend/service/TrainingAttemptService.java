@@ -8,6 +8,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -37,7 +38,8 @@ public class TrainingAttemptService {
                 request.completenessScore(),
                 request.prosodyScore(),
                 request.wordsJson(),
-                request.audioDurationMs()
+                request.audioDurationMs(),
+                OffsetDateTime.now()
         );
 
         TrainingAttempt saved = trainingAttemptRepository.save(attempt);
@@ -49,7 +51,7 @@ public class TrainingAttemptService {
         int safeLimit = Math.min(Math.max(limit, 1), 50);
 
         return trainingAttemptRepository
-                .findByClientIdOrderByCreatedAtDesc(clientId, PageRequest.of(0, safeLimit))
+                .findByClientIdOrderByScoredAtDesc(clientId, PageRequest.of(0, safeLimit))
                 .stream()
                 .map(TrainingAttemptResponse::from)
                 .toList();

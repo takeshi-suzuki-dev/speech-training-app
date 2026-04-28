@@ -61,6 +61,10 @@ public class TrainingAttempt {
     private Integer audioDurationMs;
 
     @CreationTimestamp
+    @Column(name = "scored_at", nullable = false, updatable = false)
+    private OffsetDateTime scoredAt;
+
+    @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
 
@@ -80,7 +84,8 @@ public class TrainingAttempt {
             BigDecimal completenessScore,
             BigDecimal prosodyScore,
             String wordsJson,
-            Integer audioDurationMs
+            Integer audioDurationMs,
+            OffsetDateTime scoredAt
     ) {
         this.clientId = clientId;
         this.userId = userId;
@@ -95,6 +100,7 @@ public class TrainingAttempt {
         this.prosodyScore = prosodyScore;
         this.wordsJson = wordsJson;
         this.audioDurationMs = audioDurationMs;
+        this.scoredAt = scoredAt;
     }
 
     public UUID getId() {
@@ -151,6 +157,10 @@ public class TrainingAttempt {
 
     public Integer getAudioDurationMs() {
         return audioDurationMs;
+    }
+
+    public OffsetDateTime getScoredAt() {
+        return scoredAt;
     }
 
     public OffsetDateTime getCreatedAt() {
