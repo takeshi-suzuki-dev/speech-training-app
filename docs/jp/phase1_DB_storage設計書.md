@@ -7,7 +7,7 @@
 Phase 1 では、以下を備えた最小限使える MVP を作る。
 
 - 発音採点結果の永続化
-- 固定定型文の複数管理
+- カテゴリ管理された固定定型文の複数管理
 - browser-local identifier による簡易的なユーザー識別
 - 最小限の見本音声永続化
 - 固定定型文向けの TTS キャッシュ
@@ -23,8 +23,8 @@ Phase 1 では、以下を備えた最小限使える MVP を作る。
 - Phase 1 のDBとして Supabase PostgreSQL を利用する
 - 生成済み見本音声の保存先として Supabase Storage を利用する
 - 発音採点結果を保存する
-- 固定定型文を保存する
-- `user_id` として browser-local identifier を利用する
+- カテゴリ・定型文を保存する
+- `client_id` として browser-local identifier（UUID）を利用する
 - Roger / Sarah の2つの固定見本音声を提供する
 - 固定定型文に対して ElevenLabs で生成した MP3 を保存する
 - 再生のたびに ElevenLabs を呼ばず、保存済み MP3 を再利用する
@@ -47,6 +47,7 @@ Phase 1 では、以下を備えた最小限使える MVP を作る。
 - 複雑なアクセス制御
 - Backendによる音声proxy配信
 - `audio_assets` のような音声メタデータテーブル
+- owner_type / owner_user_id によるカテゴリ所有権管理（Phase 2に延期）
 
 これらは Phase 2 以降に延期する。
 
@@ -76,84 +77,193 @@ Supabase Storage
 
 ## 4. Database Design
 
-### 4.1 `practice_phrases`
+Phase 1 では以下の3テーブルを使用する。
 
-Phase 1で利用する固定定型文を保存する。
+```text
+sentence_categories
+        |
+        v
+sentence_templates
+        |
+        v
+training_attempts
+```
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | uuid / bigint | Primary key |
-| `text` | text | 練習用の定型文 |
-| `display_order` | integer | 表示順 |
-| `is_active` | boolean | 利用可能かどうか |
-| `created_at` | timestamp | 作成日時 |
-| `updated_at` | timestamp | 更新日時 |
+外部キーは以下の方針で張る。
 
-#### 補足
+- `sentence_templates.category_id` → `sentence_categories.id`（ON DELETE RESTRICT）
+- `training_attempts.sentence_id` → `sentence_templates.id`（ON DELETE SET NULL）
 
-- Phase 1 では固定定型文のみ対応する。
-- ユーザー定型文は Phase 2 に延期する。
+値の整合性チェックは原則アプリ側のEnumで管理し、DBのCHECK制約は mode のみ残す。
 
 ---
 
-### 4.2 `training_attempts`
+### 4.1 `sentence_categories`
+
+定型文カテゴリを管理する。
+
+```sql
+create table public.sentence_categories (
+  id uuid not null default gen_random_uuid(),
+  category_key text null,
+  display_name text not null,
+  description text null,
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamp with time zone not null default now(),
+
+  constraint sentence_categories_pkey primary key (id),
+  constraint sentence_categories_category_key_key unique (category_key)
+);
+```
+
+| カラム         | 説明                                                                        |
+| -------------- | --------------------------------------------------------------------------- |
+| `id`           | 主キー                                                                      |
+| `category_key` | systemカテゴリ用の安定キー（daily / interview / tech など）。一意またはnull |
+| `display_name` | 画面表示名                                                                  |
+| `description`  | カテゴリの説明                                                              |
+| `sort_order`   | 表示順                                                                      |
+| `is_active`    | 論理的な表示/非表示                                                         |
+| `created_at`   | 作成日時                                                                    |
+
+#### 補足
+
+- Phase 1 ではsystem提供カテゴリのみ。owner_type / owner_user_id は Phase 2で検討する。
+- category_key は seed データやテスト用の安定参照キーとして利用する。
+
+---
+
+### 4.2 `sentence_templates`
+
+定型文マスタ。見本音声の管理もこのテーブルで行う。
+
+```sql
+create table public.sentence_templates (
+  id uuid not null default gen_random_uuid(),
+  category_id uuid not null,
+  title text not null,
+  display_text text not null,
+  scoring_text text not null,
+  sample_audio_text text not null,
+  sample_audio_path text null,
+  voice_id text null,
+  model_id text null,
+  difficulty text not null default 'easy',
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamp with time zone not null default now(),
+
+  constraint sentence_templates_pkey primary key (id),
+
+  constraint sentence_templates_category_id_fkey
+    foreign key (category_id)
+    references public.sentence_categories(id)
+    on delete restrict
+);
+```
+
+| カラム              | 説明                                                               |
+| ------------------- | ------------------------------------------------------------------ |
+| `id`                | 主キー                                                             |
+| `category_id`       | sentence_categories.id への外部キー                                |
+| `title`             | 一覧用タイトル                                                     |
+| `display_text`      | 画面に表示する文                                                   |
+| `scoring_text`      | Azure採点に使う文（Phase 1では wanna系など）                       |
+| `sample_audio_text` | ElevenLabs音声生成に使う文                                         |
+| `sample_audio_path` | Supabase Storage上のMP3パス                                        |
+| `voice_id`          | ElevenLabs voice ID（Backendで解決するため通常不要）               |
+| `model_id`          | ElevenLabs model ID                                                |
+| `difficulty`        | easy / medium / hard 想定。DBではCHECKしない（アプリのEnumで管理） |
+| `sort_order`        | 表示順                                                             |
+| `is_active`         | 論理的な表示/非表示                                                |
+| `created_at`        | 作成日時                                                           |
+
+#### 補足
+
+- difficulty の値制限はアプリ側のEnumで管理する。DBのCHECK制約は使わない。
+- sample_audio_path は Supabase Storage の決定的なパスを格納する。
+
+---
+
+### 4.3 `training_attempts`
 
 発音採点結果を保存する。
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | uuid / bigint | Primary key |
-| `user_id` | text | browser-local identifier |
-| `phrase_id` | uuid / bigint | `practice_phrases` への参照 |
-| `reference_text` | text | 採点対象の文 |
-| `transcript` | text | 認識された文字列 |
-| `recognition_status` | text | Azure の認識ステータス |
-| `overall_score` | numeric | 総合発音スコア |
-| `accuracy_score` | numeric | Accuracy score |
-| `fluency_score` | numeric | Fluency score |
-| `completeness_score` | numeric | Completeness score |
-| `words_json` | jsonb | 単語・音節・音素レベルの詳細 |
-| `raw_json` | jsonb | デバッグ用の Azure raw response |
-| `created_at` | timestamp | 作成日時 |
+```sql
+create table public.training_attempts (
+  id uuid not null default gen_random_uuid(),
+  client_id uuid not null,
+  user_id uuid null,
+  mode text not null,
+  sentence_id uuid null,
+  reference_text text not null,
+  recognized_text text null,
+  overall_score numeric null,
+  accuracy_score numeric null,
+  fluency_score numeric null,
+  completeness_score numeric null,
+  prosody_score numeric null,
+  words_json jsonb null,
+  audio_duration_ms integer null,
+  scored_at timestamp with time zone not null default now(),
+  created_at timestamp with time zone null default now(),
+
+  constraint training_attempts_pkey primary key (id),
+
+  constraint training_attempts_sentence_id_fkey
+    foreign key (sentence_id)
+    references public.sentence_templates(id)
+    on delete set null,
+
+  constraint training_attempts_mode_check check (
+    mode = any (array['sentence'::text, 'free'::text])
+  )
+);
+```
+
+| カラム               | 説明                                                        |
+| -------------------- | ----------------------------------------------------------- |
+| `id`                 | 主キー                                                      |
+| `client_id`          | browser-local identifier（UUID）。Phase 1の履歴紐づけに使う |
+| `user_id`            | Phase 2以降の認証用。Phase 1ではnull                        |
+| `mode`               | sentence / free。DBレベルでCHECKする                        |
+| `sentence_id`        | sentence_templates.id への外部キー。free modeではnull       |
+| `reference_text`     | 採点時に使った文のスナップショット                          |
+| `recognized_text`    | Azure認識結果                                               |
+| `overall_score`      | 総合発音スコア                                              |
+| `accuracy_score`     | Accuracy score                                              |
+| `fluency_score`      | Fluency score                                               |
+| `completeness_score` | Completeness score                                          |
+| `prosody_score`      | Prosody score                                               |
+| `words_json`         | word-level結果。詳細表示用に保存                            |
+| `audio_duration_ms`  | 音声長（ミリ秒）                                            |
+| `scored_at`          | 採点日時。履歴グラフ・日次集計の基準                        |
+| `created_at`         | DBレコード作成日時                                          |
 
 #### 補足
 
-- `user_id` は Phase 1 では認証済みユーザーIDではない。
-- 初回アクセス時に生成される browser-local identifier を利用する。
-- `words_json` には、Azure Speech が返す word-level / syllable-level / phoneme-level / NBest phoneme 情報を含める可能性がある。
-- 本格的な認証は Phase 2 に延期する。
+- `client_id` は認証済みユーザーIDではない。初回アクセス時にUUIDを生成しlocalStorageに保存する。
+- `mode` のCHECK制約は残す。sentence / free の2値であり仕様が固まっているため。
+- `sentence_id` はON DELETE SET NULLを使う。定型文削除後も採点履歴は残す。
+- `user_id` は Phase 2で認証を導入した際に利用する前向きカラム。Phase 1ではnull。
 
 ---
 
-### 4.3 Phase 1では `audio_assets` テーブルを作らない
+### 4.4 Phase 1 では `audio_assets` テーブルを作らない
 
 Phase 1 では `audio_assets` テーブルを作らない。
 
-見本音声ファイルは、以下の決定的な storage path で管理する。
+見本音声のパスは `sentence_templates.sample_audio_path` で管理する。固定定型文と2つの固定音声だけであれば、テンプレートIDと voice_name で見本音声ファイルを一意に特定できる。
 
-```text
-preset/{phrase_id}/{voice_name}.mp3
-```
-
-固定定型文と2つの固定音声だけであれば、`phrase_id + voice_name` で見本音声ファイルを一意に特定できる。
-
-Frontend は Public URL を直接再生しに行く。  
-ファイルが存在しない場合、Frontend が Backend の音声生成APIを呼び出す。  
-Backend は MP3 を生成し、決定的な path にアップロードする。
-
-#### なぜ Phase 1 で audio metadata table を作らないか
-
-`audio_assets` テーブルは本格的な音声管理には有用だが、Phase 1 では不要。
-
-理由は以下。
+#### なぜPhase 1で audio metadata table を作らないか
 
 - 固定定型文のみ対応
 - 固定音声は Roger / Sarah の2つのみ
-- storage path は `phrase_id + voice_name` から決定できる
+- storage pathは `sentence_template_id + voice_name` から決定できる
 - ユーザー定型文音声がない
 - voice選択UIがない
 - 再生成UIがない
-- 音声の削除・置換フローがない
 
 `audio_assets` を作らないことで、Phase 1 のDB設計をシンプルに保ち、DBメタデータとStorage実体の不整合リスクを減らす。
 
@@ -175,12 +285,8 @@ Bucket access:
 Public
 ```
 
-この bucket には、固定定型文向けに生成した MP3 見本音声を保存する。
+Phase 1 の音声ファイルは全ユーザー共通の固定見本音声であり、ユーザー録音音声・個人情報・有料ユーザー固有コンテンツは含まれない。そのため Phase 1 では Public bucket を利用する。
 
-Phase 1 では、保存される音声は全ユーザー共通の固定見本音声である。  
-ユーザー録音音声・個人情報・有料ユーザー固有コンテンツは含まれない。
-
-そのため、Phase 1 では Public bucket を利用する。  
 Backend proxy は、認証やユーザー固有音声管理が入る Phase 2 に延期する。
 
 ---
@@ -190,22 +296,17 @@ Backend proxy は、認証やユーザー固有音声管理が入る Phase 2 に
 見本音声ファイルは以下の形式で保存する。
 
 ```text
-preset/{phrase_id}/{voice_name}.mp3
+preset/{sentence_template_id}/{voice_name}.mp3
 ```
 
 例:
 
 ```text
-preset/001/roger.mp3
-preset/001/sarah.mp3
+preset/a1b2c3d4-e5f6-7890-abcd-ef1234567890/roger.mp3
+preset/a1b2c3d4-e5f6-7890-abcd-ef1234567890/sarah.mp3
 ```
 
-#### 補足
-
-- Supabase Storage上で人間が見て分かりやすい path にする。
-- Phase 1 では hash ベースの cache key は使わない。
-- Phase 1 では `audio_assets` テーブルも使わない。
-- Phase 2 でユーザー定型文を追加する場合、storage path 設計を拡張する。
+`sentence_templates.sample_audio_path` にこのパスを格納し、Frontendは Backend経由または直接 Public URL を構築して再生する。
 
 ---
 
@@ -213,24 +314,16 @@ preset/001/sarah.mp3
 
 Phase 1 では2つの固定見本音声を使う。
 
-| `voice_name` | Description |
-|---|---|
-| `roger` | 男声の見本音声 |
-| `sarah` | 女声の見本音声 |
+| `voice_name` | Description    |
+| ------------ | -------------- |
+| `roger`      | 男声の見本音声 |
+| `sarah`      | 女声の見本音声 |
 
 実際の ElevenLabs `voice_id` は Backend 設定で管理する。
-
-例:
 
 ```text
 roger -> ELEVENLABS_VOICE_ID_ROGER
 sarah -> ELEVENLABS_VOICE_ID_SARAH
-```
-
-UIでは以下のように表示する想定。
-
-```text
-[ Roger ] [ Sarah ]
 ```
 
 ---
@@ -241,7 +334,7 @@ UIでは以下のように表示する想定。
 
 ユーザーが Roger または Sarah をクリックした場合:
 
-1. Frontend が `phrase_id` と `voice_name` から Supabase Storage の Public URL を組み立てる。
+1. Frontend が `sentence_template_id` と `voice_name` から Supabase Storage の Public URL を組み立てる。
 2. Frontend が Public URL から MP3 を直接再生しようとする。
 3. 再生に成功した場合、Backend 呼び出しは不要。
 4. ファイルが存在せず再生に失敗した場合、Frontend が Backend の音声生成APIを呼ぶ。
@@ -254,16 +347,15 @@ Phase 1 では Backend proxy は使わない。
 
 MP3ファイルが存在せず再生に失敗した場合:
 
-1. Frontend が `phrase_id` と `voice_name` を指定して Backend の音声生成APIを呼ぶ。
+1. Frontend が `sentenceTemplateId` と `voiceName` を指定して Backend の音声生成APIを呼ぶ。
 2. Backend が `voice_name` が `roger` または `sarah` であることを検証する。
-3. Backend が `practice_phrases` から定型文テキストを取得する。
+3. Backend が `sentence_templates` から定型文テキストを取得する。
 4. Backend が `voice_name` から ElevenLabs の `voice_id` を解決する。
 5. Backend が ElevenLabs TTS API を呼ぶ。
 6. Backend が生成された MP3 を決定的な path で Supabase Storage にアップロードする。
-7. Backend が Supabase Storage の Public URL を返す。
-8. Frontend が生成された MP3 を Public URL から直接再生する。
-
-Backend proxy は、認証導入後の Phase 2 に延期する。
+7. Backend が `sentence_templates.sample_audio_path` を更新する。
+8. Backend が Supabase Storage の Public URL を返す。
+9. Frontend が生成された MP3 を Public URL から直接再生する。
 
 ---
 
@@ -275,21 +367,9 @@ Phase 1 では hybrid generation strategy を採用する。
 
 代表的なデモ用フレーズは Roger / Sarah の両方で事前生成する。
 
-目的:
-
-- デモ体験を安定させる
-- デモ時の初回TTS待ちを避ける
-- 面接・プレゼン時の失敗リスクを下げる
-
 ### 初回再生時生成
 
-事前生成していない固定定型文は、初回再生時に生成する。
-
-目的:
-
-- 使われない音声を生成しない
-- ElevenLabs APIコストを抑える
-- Phase 1 の実装を軽量に保つ
+事前生成していない固定定型文は、初回再生時に生成する。ElevenLabs APIコストを抑え、Phase 1 の実装を軽量に保つ。
 
 ---
 
@@ -304,18 +384,9 @@ Frontend が Public MP3 URL を再生できない場合:
 
 ### ElevenLabs Generation Failure
 
-ElevenLabs の生成に失敗した場合:
-
 - Frontend にエラーレスポンスを返す
 - ユーザー向けのエラーメッセージを表示する
 - 壊れた音声ファイルは作成しない
-
-### Supabase Storage Upload Failure
-
-アップロードに失敗した場合:
-
-- Storage エラーを返す
-- 次回再生時に再試行できるようにする
 
 ### Missing Storage File
 
@@ -323,8 +394,7 @@ ElevenLabs の生成に失敗した場合:
 
 - Frontend の再生が失敗する
 - Frontend が Backend の音声生成APIを呼ぶ
-- Backend が音声を再生成する
-- Backend が MP3 を同じ決定的 path に再アップロードする
+- Backend が音声を再生成し、同じ決定的 path に再アップロードする
 - Backend が Public URL を返す
 
 ---
@@ -346,27 +416,18 @@ ELEVENLABS_VOICE_ID_SARAH
 
 ### Security Note
 
-Supabase service role key は絶対に Frontend に出さない。
-
-アップロード処理はすべて Backend 経由で行う。
-
-Frontend は Backend の音声生成APIに対して、`reference_text`、`voice_id`、`model_id`、`storage_path` を直接送らない。
+Supabase service role key は絶対に Frontend に出さない。アップロード処理はすべて Backend 経由で行う。
 
 Frontend から送るのは以下のみ。
 
 ```json
 {
-  "phraseId": "001",
+  "sentenceTemplateId": "a1b2c3d4-...",
   "voiceName": "roger"
 }
 ```
 
-Backend が以下を導出する。
-
-- phrase text
-- ElevenLabs voice ID
-- model ID
-- storage path
+Backend が phrase text、ElevenLabs voice ID、model ID、storage path を導出する。
 
 ---
 
@@ -376,65 +437,49 @@ Backend が以下を導出する。
 
 - Frontend から Supabase PostgreSQL に直接アクセスしない。
 - すべてのDB操作は Spring Boot Backend で行う。
-- SQLは JPA、Spring Data、`PreparedStatement`、`NamedParameterJdbcTemplate` などの parameter binding を使う。
-- SQL文字列をユーザー入力で連結しない。
+- SQLは JPA、Spring Data、`PreparedStatement` などの parameter binding を使う。
 - `voice_name` は `roger` / `sarah` の固定値に制限する。
 
 ### Storage Path Safety
 
 - Storage path は Backend 側で生成する、または信頼できるIDから決定的に導出する。
 - 自由入力テキストを storage path に直接使わない。
-- Phase 1 では `phrase_id` と `voice_name` を使って path を作る。
-
-### Frontend Display Safety
-
-- ユーザー入力テキストは通常のテキストとして描画する。
-- 将来のユーザー定型文表示で `dangerouslySetInnerHTML` を使わない。
 
 ---
 
 ## 12. Phase 1 Design Decisions
 
+### なぜ3テーブル構成にしたか
+
+`sentence_categories` → `sentence_templates` → `training_attempts` の階層構造により、定型文をカテゴリ単位で管理しやすくなる。また、FKを張ることでDB上でも関係を明示し、ER図が見やすくなる。
+
+### なぜ外部キーを張るか
+
+sentence_categories / sentence_templates / training_attempts の親子関係は明確であり、ポートフォリオとして面接官に見せる設計としてFKで関係を表現しておく価値がある。
+
+### なぜdifficultyのCHECKを外したか
+
+difficulty（easy / medium / hard）の値制限はアプリ側のEnumで管理する。DBのCHECK制約はアプリレイヤーと二重管理になるため使わない。
+
+### なぜmodeのCHECKを残したか
+
+mode（sentence / free）は2値であり仕様が固まっている。また、Phase 3の自由発話を見越した前向きカラムであり、DBレベルで値を保証しておく意味がある。
+
+### なぜowner_type / owner_user_idをPhase 1に入れないか
+
+Phase 1はsystem提供カテゴリのみであり、所有権の概念が不要。カラム自体をPhase 2以降で追加する方針にすることで、Phase 1のテーブル設計をシンプルに保つ。
+
 ### なぜ Supabase を使うか
 
-Supabase PostgreSQL と Supabase Storage を使うことで、インフラを軽量に保ち、ローカル検証をしやすくする。
-
-ローカルFrontend / Backend からも、デプロイ済みアプリと同じDB/Storageを使える。
+インフラを軽量に保ち、ローカル検証をしやすくするため。ローカルFrontend / Backend からも、デプロイ済みアプリと同じDB/Storageを使える。
 
 ### なぜ最小TTSキャッシュを入れるか
 
-再生ボタンを押すたびに ElevenLabs API を呼ぶべきではない。
-
-生成済み見本音声を保存することで、不要なAPI呼び出しを減らし、再生速度も改善できる。
-
-### なぜ固定定型文のみか
-
-Phase 1 は、発音採点のフィードバックループと固定定型文の練習フローに集中する。
-
-ユーザー定型文は CRUD、バリデーション、所有権、音声管理が追加で必要になるため、Phase 2 に延期する。
+再生ボタンを押すたびに ElevenLabs API を呼ぶべきではない。生成済み見本音声を保存することで、不要なAPI呼び出しを減らし、再生速度も改善できる。
 
 ### なぜ Phase 1 で `audio_assets` テーブルを作らないか
 
-Phase 1 では見本音声の path が決定的に決まる。
-
-固定定型文と2つの固定音声だけなら、`phrase_id + voice_name` でファイルを特定できる。
-
-`audio_assets` テーブルは、ユーザー定型文や本格的な音声管理が入る Phase 2 で導入する。
-
-### なぜ Phase 1 で Public URL を使うか
-
-エンタープライズ文脈では、Storage URLを直接露出させないために Backend proxy や制御されたアクセスレイヤーを使うのが一般的。
-
-ただし Phase 1 の音声ファイルは、全ユーザー共通の固定見本音声であり、ユーザー録音音声・個人情報・有料ユーザー固有コンテンツではない。
-
-そのため Phase 1 では、実装を軽量に保つため Supabase Storage の Public URL を利用する。  
-Backend proxy は、認証やユーザー固有音声管理が入る Phase 2 に延期する。
-
-### なぜ本格的なvoice管理を入れないか
-
-Phase 1 では Roger / Sarah の2つの固定音声だけを提供する。
-
-voice選択UI、再生成UI、スピード変更、本格的な音声管理は Phase 2 に延期する。
+Phase 1 では見本音声の path が決定的に決まる。`sentence_template_id + voice_name` でファイルを特定できるため、`audio_assets` テーブルは不要。Phase 2 で導入する。
 
 ---
 
@@ -442,17 +487,16 @@ voice選択UI、再生成UI、スピード変更、本格的な音声管理は P
 
 Phase 1 DB / Storage 設計の完了条件:
 
-- 固定定型文を Supabase PostgreSQL に保存できる
-- 発音採点結果を保存できる
-- 固定定型文に Roger / Sarah ボタンを表示できる
+- sentence_categories にカテゴリを保存できる
+- sentence_templates に定型文を保存できる
+- 発音採点結果を training_attempts に保存できる
+- Roger / Sarah ボタンを表示できる
 - 事前生成済みのデモ用フレーズ音声を再生できる
 - Frontend が Supabase Storage Public URL を組み立てて再生できる
 - 未生成の音声は、初回再生失敗時に Backend 経由で生成できる
 - 生成済み MP3 を Supabase Storage に保存できる
 - 保存済み MP3 を次回以降再利用できる
-- Storageファイルがない場合に Backend の生成APIで再生成できる
 - ユーザー録音音声を保存しない
-- Phase 1 では `audio_assets` テーブルを不要とする
 
 ---
 
@@ -460,8 +504,9 @@ Phase 1 DB / Storage 設計の完了条件:
 
 以下は Phase 2 に延期する。
 
-- 本格的な認証
+- 本格的な認証（user_id カラムは前向きに残す）
 - ユーザー定型文
+- owner_type / owner_user_id によるカテゴリ所有権管理
 - ユーザー固有音声管理
 - `audio_assets` テーブル
 - voice選択UI
@@ -476,28 +521,11 @@ Phase 1 DB / Storage 設計の完了条件:
 
 ## 15. Phase 2 Notes
 
-Phase 1 では、固定見本音声を決定的な path で特定できるため、意図的に `audio_assets` テーブルを作らない。
+Phase 2 では以下を検討する。
 
-Phase 2 でユーザー定型文や高度な音声管理を入れる場合、`audio_assets` テーブルを導入する。
-
-Phase 2で想定される用途:
-
-- ユーザー定型文の音声
-- ユーザーごとの音声所有権
-- voice選択
-- 再生成UI
-- 音声ステータス管理
-- 削除・置換処理
-- private bucket / signed URL strategy
-- protected audio playback のための Backend proxy
-
-また、Phase 1 では固定見本音声に Public URL を使う。
-
-Phase 2 で認証とユーザー定型文を導入する場合、音声アクセスモデルを再検討する。
-
-Phase 2 の方向性:
-
-- `audio_assets` テーブルを導入する
-- 音声ファイルをユーザー定型文やユーザーに紐づける
-- ユーザー固有音声を保護する必要がある場合、Public URL から Backend proxy または signed URL に移行する
-- ユーザー録音音声は、明示的に追加するまでスコープ外のままとする
+- `sentence_categories` に `owner_type` / `owner_user_id` を追加し、system/user 区別を管理する
+- ユーザー定型文追加に伴う `sentence_templates` の所有権管理
+- `audio_assets` テーブルの導入（ユーザー定型文音声・音声ステータス管理）
+- Private bucket / signed URL への移行（ユーザー固有音声保護が必要になった場合）
+- Backend proxy による音声配信
+- CHECK制約の追加要否を、そのフェーズの設計時に改めて判断する

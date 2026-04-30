@@ -1,3 +1,9 @@
+begin;
+
+drop table if exists public.training_attempts;
+drop table if exists public.sentence_templates;
+drop table if exists public.sentence_categories;
+
 create table public.sentence_categories (
   id uuid not null default gen_random_uuid(),
   category_key text null,
@@ -38,7 +44,7 @@ create table public.training_attempts (
   id uuid not null default gen_random_uuid(),
   client_id uuid not null,
   user_id uuid null,
-  mode text not null,
+  mode text not null default 'sentence',
   sentence_id uuid null,
   reference_text text not null,
   recognized_text text null,
@@ -50,16 +56,14 @@ create table public.training_attempts (
   words_json jsonb null,
   audio_duration_ms integer null,
   scored_at timestamp with time zone not null default now(),
-  created_at timestamp with time zone null default now(),
+  created_at timestamp with time zone not null default now(),
 
   constraint training_attempts_pkey primary key (id),
 
   constraint training_attempts_sentence_id_fkey
     foreign key (sentence_id)
     references public.sentence_templates(id)
-    on delete set null,
-
-  constraint training_attempts_mode_check check (
-    mode = any (array['sentence'::text, 'free'::text])
-  )
+    on delete set null
 );
+
+commit;
