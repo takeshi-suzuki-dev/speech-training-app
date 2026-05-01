@@ -51,7 +51,7 @@ The following items are intentionally deferred to Phase 2 or later:
 
 - Manage multiple fixed practice phrases
 - Let users select a fixed practice phrase
-- Play Roger / Sarah reference audio
+- Play Roger sample audio
 - Implement minimal TTS caching for ElevenLabs-generated audio
 - Run pronunciation assessment using Azure AI Speech
 - Display pronunciation assessment results
@@ -131,24 +131,24 @@ Instead, the app provides multiple fixed practice phrases managed by the applica
 
 ## 6. Reference Audio
 
-Phase 1 provides two fixed reference voices for fixed practice phrases:
+Phase 1 provides one fixed sample voice:
 
 - Roger
-- Sarah
 
 ### UI Concept
 
 ```text
 Practice phrase
 
-[ Roger ] [ Sarah ]
+[ Play sample audio ]
 ```
 
 The user can play either reference voice.
 
 ### Policy
 
-- Roger and Sarah are fixed voices
+- Roger is the fixed Phase 1 sample voice
+- Sarah may be added in Phase 2
 - No voice selection UI
 - No speed control
 - No regeneration button
@@ -378,7 +378,7 @@ Phase 1 MVP is complete when:
 
 - fixed practice phrases can be displayed
 - users can select a fixed practice phrase
-- Roger / Sarah reference audio buttons are displayed
+- Roger sample audio can be played
 - pre-generated demo phrase audio can be played
 - non-preloaded reference audio can be generated on first playback failure
 - generated MP3 files can be stored in Supabase Storage

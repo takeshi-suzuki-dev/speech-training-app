@@ -25,7 +25,7 @@ The goal is to keep the architecture lightweight while making the app usable for
 - Store pronunciation assessment results
 - Store categories and fixed practice phrases
 - Use a browser-local identifier (UUID) as `client_id`
-- Provide two fixed reference voices: Roger and Sarah
+- Use a single fixed reference voice: Roger
 - Store ElevenLabs-generated MP3 files for fixed practice phrases
 - Reuse stored MP3 files instead of calling ElevenLabs on every playback
 - Pre-generate representative demo phrases
@@ -40,7 +40,7 @@ The goal is to keep the architecture lightweight while making the app usable for
 - User-defined practice phrases
 - User-recorded audio persistence
 - Full audio management UI
-- Voice selection UI
+- Voice selection UI, including Sarah voice selection
 - Regeneration UI
 - Speed control
 - Audio deletion UI
@@ -77,12 +77,17 @@ This allows the app to be tested locally even after deployment, while keeping AW
 
 ## 4. Database Design
 
-Phase 1 uses three tables:
+Phase 1 uses four main tables:
 
 ```text
 sentence_categories
         |
         v
+sentence_templates
+        |
+        v
+sentence_template_audios
+
 sentence_templates
         |
         v
@@ -92,6 +97,7 @@ training_attempts
 Foreign keys are applied as follows:
 
 - `sentence_templates.category_id` → `sentence_categories.id` (ON DELETE RESTRICT)
+- `sentence_template_audios.sentence_template_id` → `sentence_templates.id`
 - `training_attempts.sentence_id` → `sentence_templates.id` (ON DELETE SET NULL)
 
 Value constraints are managed by application-level enums, except for `mode` in `training_attempts`, which is enforced by a CHECK constraint at the database level.
@@ -142,19 +148,18 @@ Stores the master data for practice phrases, including reference audio metadata.
 create table public.sentence_templates (
   id uuid not null default gen_random_uuid(),
   category_id uuid not null,
+  template_key text null,
   title text not null,
   display_text text not null,
   scoring_text text not null,
   sample_audio_text text not null,
-  sample_audio_path text null,
-  voice_id text null,
-  model_id text null,
   difficulty text not null default 'easy',
   sort_order integer not null default 0,
   is_active boolean not null default true,
   created_at timestamp with time zone not null default now(),
 
   constraint sentence_templates_pkey primary key (id),
+  constraint sentence_templates_template_key_key unique (template_key),
 
   constraint sentence_templates_category_id_fkey
     foreign key (category_id)
@@ -167,13 +172,11 @@ create table public.sentence_templates (
 | ------------------- | ------------------------------------------------------------------------------------------------------ |
 | `id`                | Primary key                                                                                            |
 | `category_id`       | Foreign key to `sentence_categories.id`                                                                |
+| `template_key`      | Stable key for system templates. Used for seed data, tests, and audio seed references                  |
 | `title`             | Title shown in the phrase list                                                                         |
 | `display_text`      | Text displayed on screen                                                                               |
 | `scoring_text`      | Text submitted to Azure for pronunciation assessment (may differ from display text, e.g., wanna forms) |
 | `sample_audio_text` | Text sent to ElevenLabs for TTS generation                                                             |
-| `sample_audio_path` | Path of the generated MP3 in Supabase Storage                                                          |
-| `voice_id`          | ElevenLabs voice ID (typically resolved by backend; stored for reference)                              |
-| `model_id`          | ElevenLabs model ID                                                                                    |
 | `difficulty`        | easy / medium / hard. Not enforced by DB CHECK; managed by application enum                            |
 | `sort_order`        | Display order                                                                                          |
 | `is_active`         | Logical show/hide flag                                                                                 |
@@ -181,12 +184,58 @@ create table public.sentence_templates (
 
 #### Notes
 
+- `template_key` is used for seed data, tests, and stable system template references.
 - `difficulty` value constraints are managed by application-level enum. No DB CHECK constraint is used.
-- `sample_audio_path` stores the deterministic Supabase Storage path for the generated MP3.
 
 ---
 
-### 4.3 `training_attempts`
+### 4.3 `sentence_template_audios`
+
+Stores generated sample audio metadata for each template sentence.
+
+Phase 1 uses only one audio record per template:
+
+- `voice_role = male`
+- Roger voice
+
+Phase 2 may add:
+
+- `voice_role = female`
+- Sarah voice
+
+```sql
+create table public.sentence_template_audios (
+  id uuid not null default gen_random_uuid(),
+  sentence_template_id uuid not null,
+  voice_role text not null,
+  voice_id text not null,
+  model_id text null,
+  audio_path text null,
+  created_at timestamp with time zone not null default now(),
+
+  constraint sentence_template_audios_pkey primary key (id),
+
+  constraint sentence_template_audios_template_fkey
+    foreign key (sentence_template_id)
+    references public.sentence_templates(id)
+    on delete cascade,
+
+  constraint sentence_template_audios_unique
+    unique (sentence_template_id, voice_role)
+);
+```
+
+#### Notes
+
+- `voice_role` is managed by the application layer.
+- Phase 1 uses `male` only.
+- Phase 2 may add `female`.
+- `audio_path` stores the Supabase Storage path for the generated MP3.
+- This avoids adding numbered columns such as `voice_id_1` and `voice_id_2`.
+
+---
+
+### 4.4 `training_attempts`
 
 Stores pronunciation assessment results.
 
@@ -250,17 +299,18 @@ create table public.training_attempts (
 
 ---
 
-### 4.4 No `audio_assets` Table in Phase 1
+### 4.5 No `audio_assets` Table in Phase 1
 
 Phase 1 does not use an `audio_assets` table.
 
-Reference audio paths are managed via `sentence_templates.sample_audio_path`. For fixed practice phrases and two fixed voices, `sentence_template_id + voice_name` is enough to locate the reference audio file.
+Reference audio paths are managed via `sentence_template_audios.audio_path`. For Phase 1, each template has one `male` audio record using the Roger voice.
+`sample_audio_path` is enough to locate the reference audio file.
 
 #### Why no audio metadata table in Phase 1?
 
 - The app only supports fixed practice phrases
-- The app only supports two fixed voices: Roger and Sarah
-- The storage path can be derived deterministically from `sentence_template_id` and `voice_name`
+- The app only supports one fixed voice: Roger
+- The storage path is stored in `sentence_templates.sample_audio_path`
 - There is no user-defined phrase audio
 - There is no voice selection UI
 - There is no regeneration UI
@@ -303,7 +353,6 @@ Examples:
 
 ```text
 preset/a1b2c3d4-e5f6-7890-abcd-ef1234567890/roger.mp3
-preset/a1b2c3d4-e5f6-7890-abcd-ef1234567890/sarah.mp3
 ```
 
 This path is stored in `sentence_templates.sample_audio_path`.
@@ -312,18 +361,16 @@ This path is stored in `sentence_templates.sample_audio_path`.
 
 ## 6. Reference Voices
 
-Phase 1 uses two fixed reference voices:
+Phase 1 uses one fixed reference voice:
 
-| `voice_name` | Description            |
-| ------------ | ---------------------- |
-| `roger`      | Male reference voice   |
-| `sarah`      | Female reference voice |
+| `voice_name` | Description          |
+| ------------ | -------------------- |
+| `roger`      | Male reference voice |
 
 The actual ElevenLabs voice IDs are managed in backend configuration:
 
 ```text
 roger -> ELEVENLABS_VOICE_ID_ROGER
-sarah -> ELEVENLABS_VOICE_ID_SARAH
 ```
 
 ---
@@ -332,9 +379,9 @@ sarah -> ELEVENLABS_VOICE_ID_SARAH
 
 ### 7.1 Playback Flow
 
-When a user clicks Roger or Sarah:
+When a user clicks the sample audio button:
 
-1. Frontend builds the Supabase Storage public URL using `sentence_template_id` and `voice_name`.
+1. Frontend uses the selected template's `sentence_template_audios.audio_path`.
 2. Frontend tries to play the MP3 directly from the public URL.
 3. If playback succeeds, no backend call is needed.
 4. If playback fails because the file does not exist, frontend calls the backend generation API.
@@ -347,13 +394,13 @@ Backend proxying is not used in Phase 1.
 
 If playback fails because the MP3 file does not exist:
 
-1. Frontend calls the backend generation API with `sentenceTemplateId` and `voiceName`.
-2. Backend validates `voice_name` as either `roger` or `sarah`.
+1. Frontend calls the backend generation API with `sentenceTemplateId`.
+2. Backend uses the Phase 1 default voice role: `male`.
 3. Backend loads the phrase text from `sentence_templates`.
 4. Backend resolves `voice_name` to the ElevenLabs voice ID.
 5. Backend calls ElevenLabs TTS API.
 6. Backend uploads the generated MP3 to Supabase Storage using the deterministic path.
-7. Backend updates `sentence_templates.sample_audio_path`.
+7. Backend updates `sentence_template_audios.audio_path`.
 8. Backend returns the Supabase Storage public URL.
 9. Frontend plays the generated MP3 directly from the public URL.
 
@@ -411,7 +458,6 @@ SUPABASE_STORAGE_BUCKET_REFERENCE_AUDIO
 ELEVENLABS_API_KEY
 ELEVENLABS_MODEL_ID
 ELEVENLABS_VOICE_ID_ROGER
-ELEVENLABS_VOICE_ID_SARAH
 ```
 
 ### Security Note
@@ -494,11 +540,11 @@ Phase 1 DB / Storage design is complete when:
 - categories can be stored in `sentence_categories`
 - practice phrases can be stored in `sentence_templates`
 - pronunciation assessment results can be stored in `training_attempts`
-- Roger and Sarah buttons can be displayed for each phrase
+- Roger sample audio can be played for each template
 - pre-generated demo phrase audio can be played
 - frontend can build and play Supabase Storage public URLs
 - non-preloaded phrase audio can be generated on first playback failure
-- generated MP3 files are saved in Supabase Storage with paths recorded in `sentence_templates.sample_audio_path`
+- generated MP3 files are saved in Supabase Storage with paths recorded in `sentence_template_audios.audio_path`
 - stored MP3 files are reused on later playback
 - user-recorded audio is not stored
 
@@ -512,7 +558,9 @@ The following items are deferred:
 - user-defined practice phrases
 - category ownership management via `owner_type` / `owner_user_id`
 - user-specific audio management
-- `audio_assets` table
+- Sarah / female voice support
+- voice selection UI if needed
+- `audio_assets` table, only if audio management becomes more complex
 - voice selection UI
 - regeneration UI
 - speed control

@@ -94,7 +94,7 @@ Turn the PoC into a minimally usable product.
 - Use Supabase PostgreSQL for Phase 1 data persistence
 - Use Supabase Storage for generated reference audio files
 - Implement minimal TTS caching for fixed practice sentences
-- Provide two fixed reference voice buttons: Roger and Sarah (Male / Female)
+- Provide Roger sample audio for fixed practice sentences
 - Pre-generate representative demo phrases
 - Generate non-preloaded reference audio on first playback
 - Reuse stored MP3 files instead of calling ElevenLabs on every playback
@@ -159,6 +159,7 @@ Extend from fixed-sentence practice to free speaking.
 - Add a themed free-response feature (within 2 minutes)
 - Extend the flow: recording → scoring → evaluation display
 - Decide UI integration (same screen or separate screen) before implementation
+- Add Sarah / female voice support if needed
 
 ---
 

@@ -14,24 +14,43 @@ create table public.sentence_categories (
 create table public.sentence_templates (
   id uuid not null default gen_random_uuid(),
   category_id uuid not null,
+  template_key text null,
   title text not null,
   display_text text not null,
   scoring_text text not null,
   sample_audio_text text not null,
-  sample_audio_path text null,
-  voice_id text null,
-  model_id text null,
   difficulty text not null default 'easy',
   sort_order integer not null default 0,
   is_active boolean not null default true,
   created_at timestamp with time zone not null default now(),
 
   constraint sentence_templates_pkey primary key (id),
+  constraint sentence_templates_template_key_key unique (template_key),
 
   constraint sentence_templates_category_id_fkey
     foreign key (category_id)
     references public.sentence_categories(id)
     on delete restrict
+);
+
+create table public.sentence_template_audios (
+  id uuid not null default gen_random_uuid(),
+  sentence_template_id uuid not null,
+  voice_role text not null,
+  voice_id text not null,
+  model_id text null,
+  audio_path text null,
+  created_at timestamp with time zone not null default now(),
+
+  constraint sentence_template_audios_pkey primary key (id),
+
+  constraint sentence_template_audios_template_fkey
+    foreign key (sentence_template_id)
+    references public.sentence_templates(id)
+    on delete cascade,
+
+  constraint sentence_template_audios_unique
+    unique (sentence_template_id, voice_role)
 );
 
 create table public.training_attempts (
