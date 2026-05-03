@@ -4,12 +4,15 @@ import { getOrCreateClientId } from "../clientId";
 export async function scorePronunciation(
   audioFile: File,
   referencetext: string,
+  sentenceId?: string,
 ): Promise<SpeechEvaluateResponse> {
   const formData = new FormData();
   formData.append("audio", audioFile);
   formData.append("referenceText", referencetext);
   formData.append("clientId", getOrCreateClientId());
   formData.append("mode", "sentence");
+
+  if (sentenceId) formData.append("sentenceId", sentenceId);
 
   const response = await fetch(
     "http://localhost:8080/api/pronunciation/score",

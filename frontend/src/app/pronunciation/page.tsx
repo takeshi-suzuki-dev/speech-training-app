@@ -2,25 +2,23 @@
 
 import { useEffect, useRef, useState } from "react";
 import { scorePronunciation } from "@/lib/api/pronunciationAssessment";
+import {
+  fetchSentenceCategories,
+  fetchSentenceTemplates,
+  SentenceCategory,
+  SentenceTemplate,
+} from "@/lib/api/sentenceTemplates";
 import { generateSampleSpeech } from "@/lib/api/tts";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
 
 // ── Static data ──────────────────────────────────────────────
-const CATEGORIES = [
-  { id: "daily", icon: "💬", name: "Daily Chat" },
-  { id: "interview", icon: "💼", name: "Interview" },
-  { id: "tech", icon: "💻", name: "Tech Talk" },
-  { id: "travel", icon: "✈️", name: "Travel" },
-];
-
-const DEMO_PHRASES = [
-  {
-    id: "p1",
-    text: "Hi, There. It's all done.",
-    label: "Demo",
-    difficulty: "Easy",
-  },
-];
+const getCategoryIcon = (categoryKey: string | null) => {
+  if (categoryKey === "daily") return "💬";
+  if (categoryKey === "interview") return "🧑‍💼";
+  if (categoryKey === "tech") return "💻";
+  if (categoryKey === "portfolio") return "✨";
+  return "📘";
+};
 
 // ── Helpers ──────────────────────────────────────────────────
 const scoreTextColor = (score: number) => {
@@ -33,17 +31,6 @@ const wordChipClass = (score: number) => {
   if (score >= 80) return "bg-emerald-50 text-emerald-700 border-emerald-200";
   if (score >= 60) return "bg-amber-50 text-amber-600 border-amber-200";
   return "bg-red-50 text-red-600 border-red-200";
-};
-
-const errorChipClass = (errorType: string) => {
-  const key = (errorType ?? "none").toLowerCase().replace(/\s+/g, "");
-  if (key === "none")
-    return "bg-emerald-50 text-emerald-700 border border-emerald-200";
-  if (key === "mispronunciation")
-    return "bg-red-50 text-red-600 border border-red-200";
-  if (key === "omission")
-    return "bg-amber-50 text-amber-600 border border-amber-200";
-  return "bg-gray-100 text-gray-500 border border-gray-200";
 };
 
 function getRecognitionStatusMessage(status?: string): string | null {
@@ -119,6 +106,13 @@ export default function PronunciationPage() {
   const [referenceText, setReferenceText] = useState(
     "Hi, There. It's all done.",
   );
+  const [categories, setCategories] = useState<SentenceCategory[]>([]);
+  const [templates, setTemplates] = useState<SentenceTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    null,
+  );
+  const [categoryLoading, setCategoryLoading] = useState(false);
+  const [templateLoading, setTemplateLoading] = useState(false);
   const [result, setResult] = useState<SpeechEvaluateResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [ttsLoading, setTtsLoading] = useState(false);
@@ -187,6 +181,99 @@ export default function PronunciationPage() {
       if (audioContextRef.current) void audioContextRef.current.close();
     };
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadCategories = async () => {
+      try {
+        setCategoryLoading(true);
+        setErrorMessage("");
+
+        const data = await fetchSentenceCategories();
+
+        if (ignore) {
+          return;
+        }
+
+        setCategories(data);
+
+        if (data.length > 0) {
+          setSelectedCategoryId(data[0].id);
+        }
+      } catch (error) {
+        if (!ignore) {
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Failed to load sentence categories.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setCategoryLoading(false);
+        }
+      }
+    };
+
+    void loadCategories();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  // ── when selected Category ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!selectedCategoryId) {
+      setTemplates([]);
+      setSelectedTemplateId(null);
+      return;
+    }
+
+    let ignore = false;
+
+    const loadTemplates = async () => {
+      try {
+        setTemplateLoading(true);
+        setErrorMessage("");
+
+        const data = await fetchSentenceTemplates(selectedCategoryId);
+
+        if (ignore) {
+          return;
+        }
+
+        setTemplates(data);
+
+        if (data.length > 0) {
+          const firstTemplate = data[0];
+          setSelectedTemplateId(firstTemplate.id);
+          setReferenceText(firstTemplate.displayText);
+        } else {
+          setSelectedTemplateId(null);
+        }
+      } catch (error) {
+        if (!ignore) {
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Failed to load sentence templates.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setTemplateLoading(false);
+        }
+      }
+    };
+
+    void loadTemplates();
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedCategoryId]);
 
   // ── Recording ─────────────────────────────────────────────
   const handleStartRecording = async () => {
@@ -351,7 +438,9 @@ export default function PronunciationPage() {
       setTtsLoading(true);
       setErrorMessage("");
       if (audioUrl) URL.revokeObjectURL(audioUrl);
-      const blob = await generateSampleSpeech(referenceText);
+      const sampleAudioText =
+        selectedTemplate?.sampleAudioText ?? referenceText;
+      const blob = await generateSampleSpeech(sampleAudioText);
       const url = URL.createObjectURL(blob);
       setAudioUrl(url);
       // play after state update via effect
@@ -388,7 +477,12 @@ export default function PronunciationPage() {
     try {
       setLoading(true);
       setErrorMessage("");
-      const response = await scorePronunciation(audioFile, referenceText);
+      const scoringText = selectedTemplate?.scoringText ?? referenceText;
+      const response = await scorePronunciation(
+        audioFile,
+        scoringText,
+        selectedTemplate?.id,
+      );
       setResult(response);
       setExpandedWord(null);
       setScored(true);
@@ -410,8 +504,9 @@ export default function PronunciationPage() {
     );
   };
 
-  const selectPhrase = (text: string) => {
-    setReferenceText(text);
+  const selectTemplate = (template: SentenceTemplate) => {
+    setSelectedTemplateId(template.id);
+    setReferenceText(template.displayText);
     setResult(null);
     setAudioFile(null);
     setAudioUrl((prev) => {
@@ -430,7 +525,9 @@ export default function PronunciationPage() {
   // ── Derived ───────────────────────────────────────────────
   const words = result?.words ?? [];
   const sentenceScores = result?.sentenceScores;
-  const selectedCategory = CATEGORIES.find((c) => c.id === selectedCategoryId);
+  const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
+  const selectedTemplate =
+    templates.find((template) => template.id === selectedTemplateId) ?? null;
 
   // ── Time formatter ────────────────────────────────────────
   const formatTime = (sec: number) => {
@@ -443,10 +540,10 @@ export default function PronunciationPage() {
   // ── Render ─────────────────────────────────────────────────
   // ═══════════════════════════════════════════════════════════
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-blue-50 to-emerald-50">
+    <div className="min-h-screen bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
       {/* ── Nav ── */}
       <nav className="sticky top-0 z-10 flex items-center gap-4 px-5 md:px-8 h-14 bg-white/85 backdrop-blur-md border-b border-purple-100">
-        <span className="mr-2 text-lg font-black bg-gradient-to-r from-pink-400 to-violet-400 bg-clip-text text-transparent">
+        <span className="mr-2 text-lg font-black bg-linear-to-r from-pink-400 to-violet-400 bg-clip-text text-transparent">
           ✦ Speech Trainer
         </span>
         <span className="hidden md:inline text-sm font-bold text-purple-400 bg-purple-50 px-3 py-1 rounded-full">
@@ -456,77 +553,54 @@ export default function PronunciationPage() {
           <span className="flex items-center gap-1 bg-yellow-50 border-2 border-yellow-200 rounded-full px-3 py-1 text-xs font-bold text-yellow-700">
             🔥 12
           </span>
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-300 to-violet-400 flex items-center justify-center text-sm">
+          <div className="w-8 h-8 rounded-full bg-linear-to-br from-pink-300 to-violet-400 flex items-center justify-center text-sm">
             🎤
           </div>
         </div>
       </nav>
 
-      <div className="flex max-w-[1200px] mx-auto md:gap-5 md:p-6">
+      <div className="flex max-w-300 mx-auto md:gap-5 md:p-6">
         {/* ══════════════════════════════════════
             PC SIDEBAR — drill-down
         ══════════════════════════════════════ */}
-        <aside className="hidden md:flex flex-col gap-4 w-[272px] flex-shrink-0">
+        <aside className="hidden md:flex flex-col gap-4 w-68 shrink-0">
           <Card>
             {/* Category view */}
             {sidebarView === "categories" && (
               <>
                 <SectionLabel>Category</SectionLabel>
                 <div className="flex flex-col gap-1.5">
-                  {CATEGORIES.map((cat) => (
-                    <button
-                      key={cat.id}
-                      onClick={() => {
-                        setSelectedCategoryId(cat.id);
-                        setSidebarView("phrases");
-                      }}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 border-transparent hover:bg-purple-50 hover:border-purple-100 transition text-left w-full"
-                    >
-                      <span className="text-xl w-7 text-center">
-                        {cat.icon}
-                      </span>
-                      <div className="flex-1">
-                        <div className="text-sm font-bold text-gray-700">
-                          {cat.name}
-                        </div>
-                        <div className="text-[11px] text-gray-400">
-                          — phrases
-                        </div>
-                      </div>
-                      <span className="text-purple-300 text-base">›</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="h-px bg-gradient-to-r from-transparent via-purple-200 to-transparent my-4" />
-                <SectionLabel>Demo Phrase</SectionLabel>
-                {DEMO_PHRASES.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => selectPhrase(p.text)}
-                    className={`w-full text-left px-4 py-3 rounded-xl border-2 transition ${
-                      referenceText === p.text
-                        ? "border-purple-300 bg-gradient-to-br from-purple-50 to-blue-50"
-                        : "border-gray-100 bg-gray-50 hover:bg-purple-50 hover:border-purple-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
-                        {p.difficulty}
-                      </span>
-                      <span className="text-[10px] font-bold text-purple-400">
-                        {p.label}
-                      </span>
-                      {referenceText === p.text && (
-                        <span className="ml-auto text-purple-400 text-xs">
-                          ✓
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[13px] font-semibold text-gray-700 leading-snug">
-                      {p.text}
+                  {categoryLoading ? (
+                    <p className="text-xs text-gray-400">
+                      Loading categories...
                     </p>
-                  </button>
-                ))}
+                  ) : (
+                    categories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCategoryId(cat.id);
+                          setSidebarView("phrases");
+                        }}
+                        className="flex w-full items-center gap-3 rounded-xl border-2 border-transparent px-3 py-2.5 text-left transition hover:border-purple-100 hover:bg-purple-50"
+                      >
+                        <span>{getCategoryIcon(cat.categoryKey)}</span>
+                        <span className="flex-1">
+                          <span className="block text-sm font-semibold text-gray-700">
+                            {cat.displayName}
+                          </span>
+                          {cat.description && (
+                            <span className="block text-xs text-gray-400">
+                              {cat.description}
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-gray-300">›</span>
+                      </button>
+                    ))
+                  )}
+                </div>
               </>
             )}
 
@@ -540,14 +614,59 @@ export default function PronunciationPage() {
                   >
                     ←
                   </button>
-                  <span className="text-base">{selectedCategory?.icon}</span>
-                  <span className="text-sm font-bold text-gray-700 flex-1">
-                    {selectedCategory?.name}
+                  <span className="text-base">
+                    {selectedCategory
+                      ? getCategoryIcon(selectedCategory.categoryKey)
+                      : "📘"}
                   </span>
+                  <span className="text-sm font-bold text-gray-700 flex-1">
+                    {selectedCategory?.displayName ?? "Templates"}
+                  </span>{" "}
                 </div>
-                <p className="text-sm text-gray-400 text-center py-6">
-                  Phrases coming soon ✨
-                </p>
+                <div className="flex flex-col gap-2">
+                  {templateLoading ? (
+                    <p className="py-6 text-center text-xs text-gray-400">
+                      Loading templates...
+                    </p>
+                  ) : templates.length === 0 ? (
+                    <p className="py-6 text-center text-xs text-gray-400">
+                      No templates yet.
+                    </p>
+                  ) : (
+                    templates.map((template) => (
+                      <button
+                        key={template.id}
+                        type="button"
+                        onClick={() => selectTemplate(template)}
+                        className={`w-full rounded-xl border-2 px-4 py-3 text-left transition ${
+                          selectedTemplateId === template.id
+                            ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50"
+                            : "border-gray-100 bg-gray-50 hover:border-purple-200 hover:bg-purple-50"
+                        }`}
+                      >
+                        <div className="mb-1 flex items-center gap-2">
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-purple-400">
+                            {template.difficulty}
+                          </span>
+                          <span className="text-xs font-semibold text-gray-500">
+                            {template.title}
+                          </span>
+                          {selectedTemplateId === template.id && (
+                            <span className="ml-auto text-xs text-purple-400">
+                              ✓
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm font-semibold text-gray-700">
+                          {template.displayText}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          Natural: {template.scoringText}
+                        </p>
+                      </button>
+                    ))
+                  )}
+                </div>
               </>
             )}
           </Card>
@@ -559,22 +678,23 @@ export default function PronunciationPage() {
         <main className="flex-1 min-w-0 flex flex-col gap-4 px-4 pt-5 pb-10 md:px-0 md:pt-0">
           {/* Mobile: category chips */}
           <div className="flex gap-2 overflow-x-auto pb-1 md:hidden">
-            {CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <button
                 key={cat.id}
+                type="button"
                 onClick={() => {
                   setSelectedCategoryId(cat.id);
                   setSheetOpen(true);
                 }}
-                className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-bold border-2 transition ${
+                className={`shrink-0 rounded-full border-2 px-4 py-2 text-sm font-bold transition ${
                   selectedCategoryId === cat.id
-                    ? "bg-gradient-to-r from-pink-300 to-violet-400 border-transparent text-white"
-                    : "bg-white border-purple-100 text-gray-400"
+                    ? "border-transparent bg-linear-to-r from-pink-300 to-violet-400 text-white"
+                    : "border-purple-100 bg-white text-gray-400"
                 }`}
               >
-                {cat.icon} {cat.name}
+                {getCategoryIcon(cat.categoryKey)} {cat.displayName}
               </button>
-            ))}
+            ))}{" "}
           </div>
 
           {/* ── Phrase panel ── */}
@@ -609,9 +729,9 @@ export default function PronunciationPage() {
                 <button
                   onClick={handlePlaySample}
                   disabled={ttsLoading}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold text-purple-700 bg-gradient-to-r from-blue-100 to-purple-100 hover:scale-105 transition disabled:opacity-50"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold text-purple-700 bg-linear-to-r from-blue-100 to-purple-100 hover:scale-105 transition disabled:opacity-50"
                 >
-                  <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm flex-shrink-0">
+                  <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0">
                     {ttsLoading ? (
                       <svg
                         className="animate-spin w-3 h-3 text-purple-400"
@@ -637,11 +757,11 @@ export default function PronunciationPage() {
                 </button>
               ) : (
                 /* ── Inline mini-player pill ── */
-                <div className="inline-flex items-center gap-2 pl-2 pr-4 py-2 rounded-full bg-gradient-to-r from-blue-100 to-purple-100">
+                <div className="inline-flex items-center gap-2 pl-2 pr-4 py-2 rounded-full bg-linear-to-r from-blue-100 to-purple-100">
                   {/* Play / Pause button */}
                   <button
                     onClick={handlePlaySample}
-                    className="w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm flex-shrink-0 hover:scale-110 transition"
+                    className="w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0 hover:scale-110 transition"
                   >
                     {isPlaying ? (
                       /* Pause icon */
@@ -761,18 +881,18 @@ export default function PronunciationPage() {
                 disabled={loading}
                 className={`flex items-center gap-2.5 px-5 py-3 rounded-xl text-sm font-bold text-white transition hover:scale-105 disabled:opacity-50 ${
                   isRecording
-                    ? "bg-gradient-to-r from-red-400 to-red-500"
-                    : "bg-gradient-to-r from-pink-300 to-violet-400"
+                    ? "bg-linear-to-r from-red-400 to-red-500"
+                    : "bg-linear-to-r from-pink-300 to-violet-400"
                 }`}
               >
                 {isRecording ? (
                   <>
-                    <span className="w-3.5 h-3.5 rounded-sm bg-white opacity-90 flex-shrink-0" />
+                    <span className="w-3.5 h-3.5 rounded-sm bg-white opacity-90 shrink-0" />
                     Stop
                   </>
                 ) : (
                   <>
-                    <span className="w-3.5 h-3.5 rounded-full bg-white opacity-90 flex-shrink-0 ring-2 ring-white/40" />
+                    <span className="w-3.5 h-3.5 rounded-full bg-white opacity-90 shrink-0 ring-2 ring-white/40" />
                     Record
                   </>
                 )}
@@ -782,7 +902,7 @@ export default function PronunciationPage() {
               <button
                 onClick={handleSubmit}
                 disabled={loading || isRecording || !audioFile || scored}
-                className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-violet-400 to-indigo-400 hover:scale-105 transition disabled:opacity-40"
+                className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold text-white bg-linear-to-r from-violet-400 to-indigo-400 hover:scale-105 transition disabled:opacity-40"
               >
                 {loading ? (
                   <svg
@@ -809,7 +929,7 @@ export default function PronunciationPage() {
 
               {/* My voice mini-player — appears after recording */}
               {recordedAudioUrl && (
-                <div className="inline-flex items-center gap-2 pl-2 pr-3 py-2 rounded-full bg-gradient-to-r from-pink-100 to-rose-100">
+                <div className="inline-flex items-center gap-2 pl-2 pr-3 py-2 rounded-full bg-linear-to-r from-pink-100 to-rose-100">
                   <button
                     onClick={() => {
                       if (!myVoiceRef.current) return;
@@ -819,7 +939,7 @@ export default function PronunciationPage() {
                         myVoiceRef.current.pause();
                       }
                     }}
-                    className="w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm flex-shrink-0 hover:scale-110 transition"
+                    className="w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0 hover:scale-110 transition"
                   >
                     {isMyVoicePlaying ? (
                       <svg
@@ -928,7 +1048,7 @@ export default function PronunciationPage() {
                       ].map(({ label, value }, i) => (
                         <div
                           key={label}
-                          className={`rounded-xl p-3 bg-gradient-to-br ${SCORE_CARD_BG[i]}`}
+                          className={`rounded-xl p-3 bg-linear-to-br ${SCORE_CARD_BG[i]}`}
                         >
                           <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-0.5">
                             {label}
@@ -1063,7 +1183,7 @@ export default function PronunciationPage() {
               <div>
                 <p className="text-base font-black text-gray-800">
                   {selectedCategory
-                    ? `${selectedCategory.icon} ${selectedCategory.name}`
+                    ? `${getCategoryIcon(selectedCategory.categoryKey)} ${selectedCategory.displayName}`
                     : "Select a phrase"}
                 </p>
                 <p className="text-[11px] text-gray-400">No phrases yet</p>
@@ -1077,32 +1197,42 @@ export default function PronunciationPage() {
             </div>
             <div className="px-5 py-4 flex flex-col gap-3 pb-8">
               {/* Demo phrases always available */}
-              {DEMO_PHRASES.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => selectPhrase(p.text)}
-                  className={`w-full text-left px-4 py-3.5 rounded-2xl border-2 transition ${
-                    referenceText === p.text
-                      ? "border-purple-300 bg-gradient-to-br from-purple-50 to-blue-50"
-                      : "border-gray-100 bg-gray-50 hover:bg-purple-50 hover:border-purple-200"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
-                      {p.difficulty}
-                    </span>
-                    <span className="text-[10px] font-bold text-purple-400">
-                      {p.label}
-                    </span>
-                    {referenceText === p.text && (
-                      <span className="ml-auto text-purple-400 text-sm">✓</span>
-                    )}
-                  </div>
-                  <p className="text-sm font-semibold text-gray-700 leading-snug">
-                    {p.text}
-                  </p>
-                </button>
-              ))}
+              {templateLoading ? (
+                <p className="text-sm text-gray-400">Loading templates...</p>
+              ) : templates.length === 0 ? (
+                <p className="text-sm text-gray-400">No templates yet.</p>
+              ) : (
+                templates.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    onClick={() => selectTemplate(template)}
+                    className={`w-full rounded-2xl border-2 px-4 py-3.5 text-left transition ${
+                      selectedTemplateId === template.id
+                        ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50"
+                        : "border-gray-100 bg-gray-50 hover:border-purple-200 hover:bg-purple-50"
+                    }`}
+                  >
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-purple-400">
+                        {template.difficulty}
+                      </span>
+                      <span className="text-xs font-semibold text-gray-500">
+                        {template.title}
+                      </span>
+                      {selectedTemplateId === template.id && (
+                        <span className="ml-auto text-purple-400">✓</span>
+                      )}
+                    </div>
+                    <p className="text-sm font-semibold text-gray-700">
+                      {template.displayText}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      Natural: {template.scoringText}
+                    </p>
+                  </button>
+                ))
+              )}{" "}
               <p className="text-center text-sm text-gray-300 py-4">
                 More phrases coming soon ✨
               </p>
