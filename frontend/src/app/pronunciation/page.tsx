@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  fetchAssessmentResults,
+  TrainingAttemptResult,
+} from "@/lib/api/assessmentResults";
 import { scorePronunciation } from "@/lib/api/pronunciationAssessment";
 import {
   fetchSentenceCategories,
@@ -64,6 +68,36 @@ function isEffectivelyNoSpeech(result: SpeechEvaluateResponse): boolean {
 
 const MIC_AUTO_RELEASE_MS = 90_000;
 
+const buildTemplateLatestScores = (
+  attempts: TrainingAttemptResult[],
+): Map<string, number> => {
+  const latestBySentenceId = new Map<string, TrainingAttemptResult>();
+
+  for (const attempt of attempts) {
+    if (!attempt.sentenceId || attempt.overallScore == null) {
+      continue;
+    }
+
+    const current = latestBySentenceId.get(attempt.sentenceId);
+
+    if (
+      !current ||
+      new Date(attempt.scoredAt).getTime() >
+        new Date(current.scoredAt).getTime()
+    ) {
+      latestBySentenceId.set(attempt.sentenceId, attempt);
+    }
+  }
+
+  const result = new Map<string, number>();
+
+  for (const [sentenceId, attempt] of latestBySentenceId.entries()) {
+    result.set(sentenceId, Math.round(Number(attempt.overallScore)));
+  }
+
+  return result;
+};
+
 // ── Score card bg classes ────────────────────────────────────
 const SCORE_CARD_BG = [
   "from-pink-50 to-white",
@@ -108,6 +142,9 @@ export default function PronunciationPage() {
   );
   const [categories, setCategories] = useState<SentenceCategory[]>([]);
   const [templates, setTemplates] = useState<SentenceTemplate[]>([]);
+  const [templateLatestScores, setTemplateLatestScores] = useState<
+    Map<string, number>
+  >(new Map());
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
     null,
   );
@@ -217,6 +254,30 @@ export default function PronunciationPage() {
     };
 
     void loadCategories();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadAssessmentResults = async () => {
+      try {
+        const attempts = await fetchAssessmentResults(50);
+
+        if (ignore) {
+          return;
+        }
+
+        setTemplateLatestScores(buildTemplateLatestScores(attempts));
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    void loadAssessmentResults();
 
     return () => {
       ignore = true;
@@ -486,6 +547,9 @@ export default function PronunciationPage() {
       setResult(response);
       setExpandedWord(null);
       setScored(true);
+
+      const attempts = await fetchAssessmentResults(50);
+      setTemplateLatestScores(buildTemplateLatestScores(attempts));
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -563,19 +627,19 @@ export default function PronunciationPage() {
         {/* ══════════════════════════════════════
             PC SIDEBAR — drill-down
         ══════════════════════════════════════ */}
-        <aside className="hidden md:flex flex-col gap-4 w-68 shrink-0">
-          <Card>
-            {/* Category view */}
+        <aside className="hidden md:flex flex-col gap-4 w-72 shrink-0">
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            {/* ── Category view ── */}
             {sidebarView === "categories" && (
-              <>
+              <div className="p-5">
                 <SectionLabel>Category</SectionLabel>
-                <div className="flex flex-col gap-1.5">
-                  {categoryLoading ? (
-                    <p className="text-xs text-gray-400">
-                      Loading categories...
-                    </p>
-                  ) : (
-                    categories.map((cat) => (
+                {categoryLoading ? (
+                  <p className="text-xs text-gray-400 py-4 text-center">
+                    Loading…
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {categories.map((cat) => (
                       <button
                         key={cat.id}
                         type="button"
@@ -583,93 +647,153 @@ export default function PronunciationPage() {
                           setSelectedCategoryId(cat.id);
                           setSidebarView("phrases");
                         }}
-                        className="flex w-full items-center gap-3 rounded-xl border-2 border-transparent px-3 py-2.5 text-left transition hover:border-purple-100 hover:bg-purple-50"
+                        className="group flex w-full items-center gap-3 rounded-xl border-2 border-transparent px-3 py-2.5 text-left transition hover:border-purple-100 hover:bg-purple-50"
                       >
-                        <span>{getCategoryIcon(cat.categoryKey)}</span>
-                        <span className="flex-1">
-                          <span className="block text-sm font-semibold text-gray-700">
+                        <span className="text-xl w-7 text-center shrink-0">
+                          {getCategoryIcon(cat.categoryKey)}
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-bold text-gray-700 truncate">
                             {cat.displayName}
                           </span>
                           {cat.description && (
-                            <span className="block text-xs text-gray-400">
+                            <span className="block text-[11px] text-gray-400 truncate">
                               {cat.description}
                             </span>
                           )}
                         </span>
-                        <span className="text-gray-300">›</span>
+                        <span className="text-purple-300 text-base transition group-hover:translate-x-0.5 group-hover:text-purple-400">
+                          ›
+                        </span>
                       </button>
-                    ))
-                  )}
-                </div>
-              </>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
-            {/* Phrase view */}
+            {/* ── Phrase view ── */}
             {sidebarView === "phrases" && (
-              <>
+              <div className="p-5">
+                {/* Header */}
                 <div className="flex items-center gap-2 mb-4">
                   <button
                     onClick={() => setSidebarView("categories")}
-                    className="w-7 h-7 rounded-full bg-gray-100 hover:bg-purple-50 flex items-center justify-center text-gray-400 hover:text-purple-400 transition text-xs"
+                    className="w-7 h-7 rounded-full bg-gray-100 hover:bg-purple-50 flex items-center justify-center text-gray-400 hover:text-purple-400 transition text-xs shrink-0"
                   >
                     ←
                   </button>
-                  <span className="text-base">
+                  <span className="text-base shrink-0">
                     {selectedCategory
                       ? getCategoryIcon(selectedCategory.categoryKey)
                       : "📘"}
                   </span>
-                  <span className="text-sm font-bold text-gray-700 flex-1">
+                  <span className="text-sm font-bold text-gray-700 flex-1 truncate">
                     {selectedCategory?.displayName ?? "Templates"}
-                  </span>{" "}
+                  </span>
+                  <span className="text-[11px] text-gray-400 shrink-0">
+                    {templates.length}
+                  </span>
                 </div>
-                <div className="flex flex-col gap-2">
-                  {templateLoading ? (
-                    <p className="py-6 text-center text-xs text-gray-400">
-                      Loading templates...
-                    </p>
-                  ) : templates.length === 0 ? (
-                    <p className="py-6 text-center text-xs text-gray-400">
-                      No templates yet.
-                    </p>
-                  ) : (
-                    templates.map((template) => (
-                      <button
-                        key={template.id}
-                        type="button"
-                        onClick={() => selectTemplate(template)}
-                        className={`w-full rounded-xl border-2 px-4 py-3 text-left transition ${
-                          selectedTemplateId === template.id
-                            ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50"
-                            : "border-gray-100 bg-gray-50 hover:border-purple-200 hover:bg-purple-50"
-                        }`}
-                      >
-                        <div className="mb-1 flex items-center gap-2">
-                          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-purple-400">
-                            {template.difficulty}
-                          </span>
-                          <span className="text-xs font-semibold text-gray-500">
-                            {template.title}
-                          </span>
-                          {selectedTemplateId === template.id && (
-                            <span className="ml-auto text-xs text-purple-400">
-                              ✓
+
+                {/* Phrase list */}
+                {templateLoading ? (
+                  <p className="py-6 text-center text-xs text-gray-400">
+                    Loading…
+                  </p>
+                ) : templates.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-gray-400">
+                    No templates yet.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {templates.map((template) => {
+                      const isSelected = selectedTemplateId === template.id;
+                      const diff = template.difficulty?.toLowerCase() ?? "";
+                      const diffBadge =
+                        diff === "easy"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : diff === "medium" || diff === "med"
+                            ? "bg-amber-50 text-amber-600"
+                            : diff === "hard"
+                              ? "bg-red-50 text-red-600"
+                              : "bg-gray-100 text-gray-500";
+                      const diffLabel =
+                        diff.charAt(0).toUpperCase() + diff.slice(1) || "—";
+                      const lastScore = templateLatestScores.get(template.id);
+                      const dotColor =
+                        lastScore == null
+                          ? "bg-gray-200"
+                          : lastScore >= 80
+                            ? "bg-emerald-400"
+                            : lastScore >= 60
+                              ? "bg-amber-400"
+                              : "bg-red-400";
+
+                      return (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => selectTemplate(template)}
+                          className={`w-full text-left px-3 py-3 rounded-xl border-2 transition ${
+                            isSelected
+                              ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50 shadow-sm"
+                              : "border-gray-100 bg-gray-50 hover:bg-purple-50 hover:border-purple-200"
+                          }`}
+                        >
+                          {/* Badge + title row */}
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${diffBadge}`}
+                            >
+                              {diffLabel}
                             </span>
-                          )}
-                        </div>
-                        <p className="text-sm font-semibold text-gray-700">
-                          {template.displayText}
-                        </p>
-                        <p className="mt-1 text-xs text-gray-400">
-                          Natural: {template.scoringText}
-                        </p>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </>
+                            {template.title && (
+                              <span className="text-[10px] font-bold text-purple-400 truncate">
+                                {template.title}
+                              </span>
+                            )}
+                            {isSelected && (
+                              <span className="ml-auto text-purple-400 text-xs shrink-0">
+                                ✓
+                              </span>
+                            )}
+                          </div>
+                          {/* Phrase text */}
+                          <p className="text-[13px] font-semibold text-gray-700 leading-snug">
+                            {template.displayText}
+                          </p>
+                          {/* Score row */}
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
+                            />
+                            {lastScore == null ? (
+                              <span className="text-[11px] font-bold text-gray-400">
+                                Not tried yet
+                              </span>
+                            ) : (
+                              <span
+                                className={`text-[11px] font-bold ${
+                                  lastScore >= 80
+                                    ? "text-emerald-600"
+                                    : lastScore >= 60
+                                      ? "text-amber-500"
+                                      : "text-red-500"
+                                }`}
+                              >
+                                Last: {lastScore}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             )}
-          </Card>
+          </div>
         </aside>
 
         {/* ══════════════════════════════════════
@@ -694,7 +818,7 @@ export default function PronunciationPage() {
               >
                 {getCategoryIcon(cat.categoryKey)} {cat.displayName}
               </button>
-            ))}{" "}
+            ))}
           </div>
 
           {/* ── Phrase panel ── */}
@@ -1202,40 +1326,89 @@ export default function PronunciationPage() {
               ) : templates.length === 0 ? (
                 <p className="text-sm text-gray-400">No templates yet.</p>
               ) : (
-                templates.map((template) => (
-                  <button
-                    key={template.id}
-                    type="button"
-                    onClick={() => selectTemplate(template)}
-                    className={`w-full rounded-2xl border-2 px-4 py-3.5 text-left transition ${
-                      selectedTemplateId === template.id
-                        ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50"
-                        : "border-gray-100 bg-gray-50 hover:border-purple-200 hover:bg-purple-50"
-                    }`}
-                  >
-                    <div className="mb-1 flex items-center gap-2">
-                      <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-purple-400">
-                        {template.difficulty}
-                      </span>
-                      <span className="text-xs font-semibold text-gray-500">
-                        {template.title}
-                      </span>
-                      {selectedTemplateId === template.id && (
-                        <span className="ml-auto text-purple-400">✓</span>
-                      )}
-                    </div>
-                    <p className="text-sm font-semibold text-gray-700">
-                      {template.displayText}
-                    </p>
-                    <p className="mt-1 text-xs text-gray-400">
-                      Natural: {template.scoringText}
-                    </p>
-                  </button>
-                ))
-              )}{" "}
-              <p className="text-center text-sm text-gray-300 py-4">
-                More phrases coming soon ✨
-              </p>
+                templates.map((template) => {
+                  const isSelected = selectedTemplateId === template.id;
+                  const diff = template.difficulty?.toLowerCase() ?? "";
+                  const diffBadge =
+                    diff === "easy"
+                      ? "bg-emerald-50 text-emerald-700"
+                      : diff === "medium" || diff === "med"
+                        ? "bg-amber-50 text-amber-600"
+                        : diff === "hard"
+                          ? "bg-red-50 text-red-600"
+                          : "bg-gray-100 text-gray-500";
+                  const diffLabel =
+                    diff.charAt(0).toUpperCase() + diff.slice(1) || "—";
+                  const lastScore = templateLatestScores.get(template.id);
+                  const dotColor =
+                    lastScore == null
+                      ? "bg-gray-200"
+                      : lastScore >= 80
+                        ? "bg-emerald-400"
+                        : lastScore >= 60
+                          ? "bg-amber-400"
+                          : "bg-red-400";
+
+                  return (
+                    <button
+                      key={template.id}
+                      type="button"
+                      onClick={() => selectTemplate(template)}
+                      className={`w-full rounded-2xl border-2 px-4 py-3.5 text-left transition ${
+                        isSelected
+                          ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50"
+                          : "border-gray-100 bg-gray-50 hover:border-purple-200 hover:bg-purple-50"
+                      }`}
+                    >
+                      {/* Badge + title row */}
+                      <div className="mb-1.5 flex items-center gap-2">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${diffBadge}`}
+                        >
+                          {diffLabel}
+                        </span>
+                        {template.title && (
+                          <span className="text-[10px] font-bold text-purple-400 truncate">
+                            {template.title}
+                          </span>
+                        )}
+                        {isSelected && (
+                          <span className="ml-auto text-purple-400 text-xs shrink-0">
+                            ✓
+                          </span>
+                        )}
+                      </div>
+                      {/* Phrase text */}
+                      <p className="text-sm font-semibold text-gray-700 leading-snug mb-2">
+                        {template.displayText}
+                      </p>
+                      {/* Score row */}
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
+                        />
+                        {lastScore == null ? (
+                          <span className="text-[11px] font-bold text-gray-400">
+                            Not tried yet
+                          </span>
+                        ) : (
+                          <span
+                            className={`text-[11px] font-bold ${
+                              lastScore >= 80
+                                ? "text-emerald-600"
+                                : lastScore >= 60
+                                  ? "text-amber-500"
+                                  : "text-red-500"
+                            }`}
+                          >
+                            Last: {lastScore}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
