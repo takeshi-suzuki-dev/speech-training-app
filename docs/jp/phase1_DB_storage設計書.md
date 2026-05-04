@@ -77,7 +77,7 @@ Supabase Storage
 
 ## 4. Database Design
 
-Phase 1 では以下の3テーブルを使用する。
+Phase 1 では以下の4テーブルを使用する。
 
 ```text
 sentence_categories
@@ -97,6 +97,7 @@ training_attempts
 外部キーは以下の方針で張る。
 
 - `sentence_templates.category_id` → `sentence_categories.id`（ON DELETE RESTRICT）
+- `sentence_template_audios.sentence_template_id` → `sentence_templates.id`（ON DELETE CASCADE）
 - `training_attempts.sentence_id` → `sentence_templates.id`（ON DELETE SET NULL）
 
 値の整合性チェックは原則アプリ側のEnumで管理し、DBのCHECK制約は mode のみ残す。
@@ -141,33 +142,25 @@ create table public.sentence_categories (
 
 ### 4.2 `sentence_templates`
 
-定型文マスタ。見本音声の管理もこのテーブルで行う。
+定型文マスタ。見本音声メタデータは `sentence_template_audios` で管理する。
 
 ```sql
 create table public.sentence_templates (
-  id uuid not null default gen_random_uuid(),
+  id uuid not null default gen_random_uuid (),
   category_id uuid not null,
   template_key text null,
   title text not null,
   display_text text not null,
   scoring_text text not null,
   sample_audio_text text not null,
-  sample_audio_path text null,
-  voice_id text null,
-  model_id text null,
-  difficulty text not null default 'easy',
+  difficulty text not null default 'easy'::text,
   sort_order integer not null default 0,
   is_active boolean not null default true,
   created_at timestamp with time zone not null default now(),
-
   constraint sentence_templates_pkey primary key (id),
   constraint sentence_templates_template_key_key unique (template_key),
-
-  constraint sentence_templates_category_id_fkey
-    foreign key (category_id)
-    references public.sentence_categories(id)
-    on delete restrict
-);
+  constraint sentence_templates_category_id_fkey foreign KEY (category_id) references sentence_categories (id) on delete RESTRICT
+) TABLESPACE pg_default;
 ```
 
 | カラム              | 説明                                                                                  |
@@ -190,7 +183,38 @@ create table public.sentence_templates (
 
 ---
 
-### 4.3 `training_attempts`
+### 4.3 `sentence_template_audios`
+
+見本音声メタデータを管理する。
+
+```SQL
+create table public.sentence_template_audios (
+  id uuid not null default gen_random_uuid (),
+  sentence_template_id uuid not null,
+  voice_role text not null,
+  voice_id text not null,
+  model_id text null,
+  audio_path text null,
+  created_at timestamp with time zone not null default now(),
+  constraint sentence_template_audios_pkey primary key (id),
+  constraint sentence_template_audios_unique unique (sentence_template_id, voice_role),
+  constraint sentence_template_audios_template_fkey foreign KEY (sentence_template_id) references sentence_templates (id) on delete CASCADE
+) TABLESPACE pg_default;
+```
+
+#### 補足
+
+Phase 1では各定型文に対して以下の1行を使う。
+
+- `voice_role = male`
+- Roger voice
+- `audio_path = preset/{sentence_template_id}/roger.mp3`
+
+Sarah / female voice は Phase 2 で追加検討する。
+
+---
+
+### 4.4 `training_attempts`
 
 発音採点結果を保存する。
 
@@ -309,13 +333,13 @@ preset/{sentence_template_id}/{voice_name}.mp3
 preset/a1b2c3d4-e5f6-7890-abcd-ef1234567890/roger.mp3
 ```
 
-`sentence_templates.sample_audio_path` にこのパスを格納し、Frontendは Backend経由または直接 Public URL を構築して再生する。
+`sentence_template_audios.audio_path` にこのパスを格納し、Frontendは Backend経由または直接 Public URL を構築して再生する。
 
 ---
 
 ## 6. Reference Voices
 
-Phase 1 では2つの固定見本音声を使う。
+Phase 1 では Roger 固定の見本音声を使う。
 
 | `voice_name` | Description    |
 | ------------ | -------------- |

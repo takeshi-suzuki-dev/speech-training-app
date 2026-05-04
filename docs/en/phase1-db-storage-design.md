@@ -142,7 +142,7 @@ create table public.sentence_categories (
 
 ### 4.2 `sentence_templates`
 
-Stores the master data for practice phrases, including reference audio metadata.
+Stores the master data for practice phrases. Reference audio metadata is stored in `sentence_template_audios`.
 
 ```sql
 create table public.sentence_templates (
@@ -304,18 +304,18 @@ create table public.training_attempts (
 Phase 1 does not use an `audio_assets` table.
 
 Reference audio paths are managed via `sentence_template_audios.audio_path`. For Phase 1, each template has one `male` audio record using the Roger voice.
-`sample_audio_path` is enough to locate the reference audio file.
+`sentence_template_audios.audio_path` is enough to locate the reference audio file.
 
 #### Why no audio metadata table in Phase 1?
 
 - The app only supports fixed practice phrases
 - The app only supports one fixed voice: Roger
-- The storage path is stored in `sentence_templates.sample_audio_path`
+- The storage path is stored in `sentence_template_audios.audio_path`
 - There is no user-defined phrase audio
 - There is no voice selection UI
 - There is no regeneration UI
 
-Avoiding an audio metadata table keeps the Phase 1 DB design simpler and reduces the risk of metadata/storage inconsistency.
+Avoiding a separate `audio_assets` table keeps the Phase 1 DB design simpler. Template-level sample audio metadata is managed by `sentence_template_audios`.
 
 ---
 
@@ -355,7 +355,7 @@ Examples:
 preset/a1b2c3d4-e5f6-7890-abcd-ef1234567890/roger.mp3
 ```
 
-This path is stored in `sentence_templates.sample_audio_path`.
+This path is stored in `sentence_template_audios.audio_path`.
 
 ---
 
@@ -381,10 +381,11 @@ roger -> ELEVENLABS_VOICE_ID_ROGER
 
 When a user clicks the sample audio button:
 
-1. Frontend uses the selected template's `sentence_template_audios.audio_path`.
-2. Frontend tries to play the MP3 directly from the public URL.
-3. If playback succeeds, no backend call is needed.
-4. If playback fails because the file does not exist, frontend calls the backend generation API.
+1. Frontend calls the backend sample audio API with `sentenceTemplateId`.
+2. Backend checks `sentence_template_audios.audio_path`.
+3. If `audio_path` exists, backend returns the public URL without calling ElevenLabs.
+4. If `audio_path` is empty, backend generates the MP3, uploads it to Supabase Storage, updates `audio_path`, and returns the public URL.
+5. Frontend plays the returned public URL.
 
 Backend proxying is not used in Phase 1.
 
@@ -392,12 +393,12 @@ Backend proxying is not used in Phase 1.
 
 ### 7.2 Generation Flow
 
-If playback fails because the MP3 file does not exist:
+When the frontend requests sample audio:
 
 1. Frontend calls the backend generation API with `sentenceTemplateId`.
 2. Backend uses the Phase 1 default voice role: `male`.
 3. Backend loads the phrase text from `sentence_templates`.
-4. Backend resolves `voice_name` to the ElevenLabs voice ID.
+4. Backend reads `voice_id` and `model_id` from `sentence_template_audios`.
 5. Backend calls ElevenLabs TTS API.
 6. Backend uploads the generated MP3 to Supabase Storage using the deterministic path.
 7. Backend updates `sentence_template_audios.audio_path`.
@@ -412,7 +413,7 @@ Phase 1 uses a hybrid generation strategy.
 
 ### Pre-generated
 
-Representative demo phrases are pre-generated for both Roger and Sarah to ensure stable demo experience and avoid TTS latency during interviews or presentations.
+Representative demo phrases may be pre-generated with Roger to ensure stable demo experience and avoid TTS latency during interviews or presentations.
 
 ### Generated on First Playback
 
@@ -450,14 +451,13 @@ If the expected MP3 file is missing from storage:
 
 Expected backend configuration:
 
+The storage bucket name is configured in `application.properties`:
+
 ```text
 SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
-SUPABASE_STORAGE_BUCKET_REFERENCE_AUDIO
-
+SUPABASE_STORAGE_BUCKET
 ELEVENLABS_API_KEY
-ELEVENLABS_MODEL_ID
-ELEVENLABS_VOICE_ID_ROGER
 ```
 
 ### Security Note
@@ -467,10 +467,7 @@ The Supabase service role key must never be exposed to the frontend. All upload 
 The frontend sends only:
 
 ```json
-{
-  "sentenceTemplateId": "a1b2c3d4-...",
-  "voiceName": "roger"
-}
+POST /api/sentence-templates/{templateId}/sample-audio
 ```
 
 The backend derives phrase text, ElevenLabs voice ID, model ID, and storage path.
@@ -484,7 +481,8 @@ The backend derives phrase text, ElevenLabs voice ID, model ID, and storage path
 - The frontend does not access Supabase PostgreSQL directly.
 - All database operations are handled by the Spring Boot backend.
 - SQL statements use parameter binding through JPA, Spring Data, `PreparedStatement`, or `NamedParameterJdbcTemplate`.
-- `voice_name` is restricted to fixed values: `roger` and `sarah`.
+- Phase 1 does not accept `voice_name` from the frontend.
+- The backend uses the Phase 1 default voice role: `male`.
 
 ### Storage Path Safety
 
@@ -495,13 +493,13 @@ The backend derives phrase text, ElevenLabs voice ID, model ID, and storage path
 
 ## 12. Phase 1 Design Decisions
 
-### Why three tables?
+### Why four tables?
 
-The `sentence_categories` → `sentence_templates` → `training_attempts` hierarchy makes it easy to manage practice phrases by category. Foreign keys make the relationships explicit in the schema and in the ER diagram.
+The `sentence_categories` → `sentence_templates` → `sentence_template_audios` structure separates sentence text from sample audio metadata. `training_attempts` stores assessment history separately. Foreign keys make the relationships explicit in the schema and in the ER diagram.
 
 ### Why use foreign keys?
 
-The parent-child relationships between the three tables are clear. For a portfolio project intended to demonstrate DB design, foreign keys are the right choice.
+The parent-child relationships between categories, templates, sample audio metadata, and attempts are clear. For a portfolio project intended to demonstrate DB design, foreign keys are the right choice.
 
 ### Why no CHECK constraint on `difficulty`?
 
@@ -525,7 +523,9 @@ Calling ElevenLabs on every playback is wasteful and slow. Storing generated aud
 
 ### Why no `audio_assets` table in Phase 1?
 
-Phase 1 audio paths are deterministic. `sentence_template_id + voice_name` is enough to locate any reference audio file. An `audio_assets` table will be introduced in Phase 2 when user-defined phrases and full audio management are added.
+Phase 1 sample audio paths are deterministic. `sentence_template_id + voice_name` is enough to locate the generated MP3 file.
+Template-level sample audio metadata is stored in `sentence_template_audios`.
+A more general `audio_assets` table may be considered later only if audio management becomes more complex.
 
 ### Why public audio URLs in Phase 1?
 

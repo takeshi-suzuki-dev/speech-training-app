@@ -89,11 +89,12 @@ Implementation detail:
 
 - Generate a UUID on first access
 - Store it in localStorage
-- Use it as `user_id` in Phase 1
+- Use it as `client_id` in Phase 1
 
 ### Policy
 
-- `user_id` is not an authenticated user ID
+- `client_id` is not an authenticated user ID
+- `user_id` is reserved for future authentication
 - History can be linked within the same browser
 - Cross-device sync is not supported
 - Authentication is deferred to Phase 2
@@ -143,7 +144,7 @@ Practice phrase
 [ Play sample audio ]
 ```
 
-The user can play either reference voice.
+The user can play the Roger sample audio.
 
 ### Policy
 
@@ -214,18 +215,14 @@ Assessment results are stored in Supabase PostgreSQL.
 
 Main fields:
 
+- `client_id`
 - `user_id`
-- `phrase_id`
+- `mode`
+- `sentence_id`
 - `reference_text`
-- `transcript`
-- `recognition_status`
-- `overall_score`
-- `accuracy_score`
-- `fluency_score`
-- `completeness_score`
-- `words_json`
-- `raw_json`
-- `created_at`
+- `recognized_text`
+- `audio_duration_ms`
+- `scored_at`
 
 `words_json` may include word-level and phoneme-level details returned by Azure Speech.
 
@@ -257,7 +254,8 @@ Phase 1 assumes the following minimal APIs.
 ### Practice Phrases
 
 ```text
-GET /api/practice-phrases
+GET /api/sentence-categories
+GET /api/sentence-templates?categoryId={categoryId}
 ```
 
 Fetch fixed practice phrases.
@@ -265,7 +263,7 @@ Fetch fixed practice phrases.
 ### Pronunciation Assessment
 
 ```text
-POST /api/assessments
+POST /api/pronunciation/score
 ```
 
 Submit user speech audio and run Azure AI Speech pronunciation assessment.
@@ -273,7 +271,7 @@ Submit user speech audio and run Azure AI Speech pronunciation assessment.
 ### Assessment History
 
 ```text
-GET /api/assessments?userId={userId}
+GET /api/training-attempts?clientId={clientId}
 ```
 
 Fetch assessment history linked to the browser-local identifier.
@@ -281,7 +279,7 @@ Fetch assessment history linked to the browser-local identifier.
 ### Reference Audio Generation
 
 ```text
-POST /api/reference-audio/generate
+POST /api/sentence-templates/{templateId}/sample-audio
 ```
 
 Generate reference audio when the fixed phrase audio file does not exist.
