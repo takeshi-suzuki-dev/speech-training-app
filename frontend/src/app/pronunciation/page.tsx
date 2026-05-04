@@ -12,7 +12,7 @@ import {
   SentenceCategory,
   SentenceTemplate,
 } from "@/lib/api/sentenceTemplates";
-import { generateSampleSpeech } from "@/lib/api/tts";
+import { generateTemplateSampleAudio } from "@/lib/api/tts";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
 
 // ── Static data ──────────────────────────────────────────────
@@ -499,12 +499,20 @@ export default function PronunciationPage() {
       setTtsLoading(true);
       setErrorMessage("");
       if (audioUrl) URL.revokeObjectURL(audioUrl);
-      const sampleAudioText =
-        selectedTemplate?.sampleAudioText ?? referenceText;
-      const blob = await generateSampleSpeech(sampleAudioText);
-      const url = URL.createObjectURL(blob);
-      setAudioUrl(url);
-      // play after state update via effect
+      if (!selectedTemplate) {
+        setErrorMessage("Please select a sentence first.");
+        return;
+      }
+
+      const response = await generateTemplateSampleAudio(selectedTemplate.id);
+
+      setAudioUrl((previousUrl) => {
+        if (previousUrl?.startsWith("blob:")) {
+          URL.revokeObjectURL(previousUrl);
+        }
+
+        return response.audioUrl;
+      });
     } catch (error) {
       setErrorMessage(
         error instanceof Error

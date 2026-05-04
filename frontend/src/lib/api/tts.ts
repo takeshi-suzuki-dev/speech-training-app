@@ -1,3 +1,9 @@
+export type SampleAudioResponse = {
+  audioPath: string;
+  audioUrl: string;
+  generated: boolean;
+};
+
 export async function generateSampleSpeech(text: string): Promise<Blob> {
   const response = await fetch("http://localhost:8080/api/tts", {
     method: "POST",
@@ -26,4 +32,21 @@ function getTtsApiErrorMessage(status: number): string {
     return "Text-to-speech service error. Please try again later.";
   }
   return "Failed to generate sample audio. Please try again.";
+}
+
+export async function generateTemplateSampleAudio(
+  templateId: string,
+): Promise<SampleAudioResponse> {
+  const response = await fetch(
+    `http://localhost:8080/api/sentence-templates/${templateId}/sample-audio`,
+    {
+      method: "POST",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to generate sample audio.");
+  }
+
+  return response.json();
 }
