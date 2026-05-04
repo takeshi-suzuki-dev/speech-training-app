@@ -11,6 +11,9 @@ import java.util.Map;
 
 @Service
 public class TtsService {
+
+    private static final String DEFAULT_MODEL_ID = "eleven_multilingual_v2";
+
     @Value("${elevenlabs.api-key}")
     private String apiKey;
     @Value("${elevenlabs.voice-id}")
@@ -19,6 +22,10 @@ public class TtsService {
     private final RestTemplate restTemplate = new RestTemplate();
 
     public byte[] generate(String text) {
+        return generate(text, voiceId, DEFAULT_MODEL_ID);
+    }
+
+    public byte[] generate(String text, String voiceId, String modelId) {
         String url = "https://api.elevenlabs.io/v1/text-to-speech/" + voiceId;
 
         HttpHeaders headers = new HttpHeaders();
@@ -27,7 +34,7 @@ public class TtsService {
 
         Map<String, Object> body = Map.of(
                 "text", text,
-                "model_id", "eleven_multilingual_v2",
+                "model_id", modelId != null ? modelId : DEFAULT_MODEL_ID,
                 "voice_settings", Map.of("speed", 0.9)
         );
 
