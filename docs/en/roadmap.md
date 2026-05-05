@@ -86,18 +86,22 @@ Turn the PoC into a minimally usable product.
 ### Scope
 
 - Store evaluation results in a database
-- Manage multiple practice sentences (DB)
+- Manage multiple practice sentences by category
 - Display evaluation results in a well-organized single screen
-- Use a browser-local identifier as the Phase 1 user_id
+- Use a browser-local identifier as the Phase 1 `client_id`
 - Keep Phase 1 authentication-free
 - Switch result display based on Azure `RecognitionStatus`
 - Use Supabase PostgreSQL for Phase 1 data persistence
 - Use Supabase Storage for generated reference audio files
 - Implement minimal TTS caching for fixed practice sentences
 - Provide Roger sample audio for fixed practice sentences
-- Pre-generate representative demo phrases
 - Generate non-preloaded reference audio on first playback
 - Reuse stored MP3 files instead of calling ElevenLabs on every playback
+- Save pronunciation assessment results to `training_attempts`
+- Fetch the latest score for each sentence
+- Show the latest score in the practice phrase list
+- Visualize progress using line charts and bar charts
+- Add moving averages and daily aggregation
 
 ### Notes
 
@@ -128,11 +132,10 @@ Enhance learning experience and enable continuous usage.
 
 ### Scope
 
-- Retrieve evaluation history from the database
-- Visualize progress using line charts and bar charts
+- Add filtering by phrase, category, and date range
 - Provide advice based on evaluation results
 - Allow users to add custom practice sentences
-- Generate sample audio using ElevenLabs and store it in the database
+- Generate sample audio for user-defined practice sentences
 - Extend reference audio management for user-defined practice sentences
 - Add full voice management features if needed
 - Add regeneration UI if needed

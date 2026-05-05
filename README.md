@@ -91,14 +91,39 @@ PoC scope delivered:
 - sample voice playback with a custom audio player
 - user-friendly error messages for basic API failures
 
+### Phase 1 — In Progress
+
+Phase 1 is currently focused on turning the PoC into a minimally usable pronunciation training app.
+
+Implemented so far:
+
+- Fixed practice phrase categories are loaded from the backend
+- Fixed practice phrases are loaded by category
+- The frontend uses `display_text` for UI display and `scoring_text` for Azure pronunciation assessment
+- Browser recording is converted to WAV and submitted for scoring
+- Pronunciation assessment results are saved to Supabase PostgreSQL
+- Roger sample audio is generated through `POST /api/sentence-templates/{templateId}/sample-audio`
+- Generated sample audio is stored in Supabase Storage and reused through public URLs
+- The latest score for each sentence is fetched through `GET /api/sentence-latest-scores`
+- Frontend configuration such as `API_BASE_URL` is centralized under `frontend/src/lib/config.ts`
+- Backend project directory has been flattened to `backend/`
+
+Next implementation target:
+
+- Dedicated history screen
+- Basic assessment history list
+- Simple score trend visualization
+
 ---
 
 ## Future Plans
 
-- Store results in a database
+- Build a dedicated history screen
 - Visualize learning progress
+- Add moving averages and simple trend charts
 - Add feedback generation
-- Support free speaking practice
+- Support user-defined practice phrases
+- Support free speaking practice in a later phase
 
 ---
 

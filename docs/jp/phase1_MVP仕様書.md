@@ -34,16 +34,17 @@ Phase 1 は完成版ではない。
 
 ### 対象範囲
 
+- 固定定型文カテゴリの取得
 - 固定定型文の複数管理
 - 固定定型文の選択
-- Roger / Sarah の見本音声再生
+- Roger の見本音声再生
 - ElevenLabs生成音声の最小TTSキャッシュ
 - Azure AI Speech による発音採点
 - 採点結果の表示
 - 採点結果のDB保存
 - browser-local identifier による簡易的なユーザー識別
-- 最低限の履歴表示
-- AWS上での公開
+- 定型文ごとの最新score表示
+- 最低限の履歴取得
 - README / docs の整備
 - 英語で設計意図を説明できる状態
 
@@ -209,7 +210,35 @@ Phase 1 では、結果を見やすい単一画面に整理する。
 
 ---
 
-## 9. 履歴表示
+## 9. 現在の実装状況
+
+現在のPhase 1実装では、以下が完了または実装中である。
+
+- 固定定型文カテゴリをbackendから取得できる
+- カテゴリごとに固定定型文を取得できる
+- frontendでは画面表示に `display_text` を使う
+- Azure採点には `scoring_text` を使う
+- ブラウザ録音をWAVに変換して採点に送信する
+- 発音採点は `POST /api/pronunciation/score` 経由で実行する
+- 採点結果は `training_attempts` に保存する
+- Rogerの見本音声は `POST /api/sentence-templates/{templateId}/sample-audio` 経由で生成する
+- 生成した見本音声はSupabase Storageに保存する
+- 保存済みの見本音声はpublic URLで再利用する
+- 定型文ごとの最新scoreは `GET /api/sentence-latest-scores` で取得する
+- 発音練習画面では、各定型文の最新scoreを表示する
+- 次の実装対象は専用の履歴画面である
+
+補足:
+
+- Phase 1では browser-local `client_id` を使う
+- 本格的な認証はまだ入れない
+- ユーザー録音音声は保存しない
+- 自由入力TTS APIは現在のPhase 1ユーザーフローには含めない
+- 本格的な進捗グラフは、履歴データ取得が安定してから実装する
+
+---
+
+## 10. 履歴表示
 
 Phase 1 では最低限の履歴表示を行う。
 
@@ -228,61 +257,69 @@ Phase 1 では最低限の履歴表示を行う。
 
 ---
 
-## 10. API要件
+## 11. API要件
 
-Phase 1 では、最低限以下のAPIを想定する。
+Phase 1 では、以下のAPIを使用する。
 
 ### Practice phrases
 
 ```text
-GET /api/practice-phrases
+GET /api/sentence-categories
+GET /api/sentence-templates?categoryId={categoryId}
 ```
 
-固定定型文一覧を取得する。
+固定定型文カテゴリと、カテゴリごとの固定定型文を取得する。
 
 ### Pronunciation assessment
 
 ```text
-POST /api/assessments
+POST /api/pronunciation/score
 ```
 
-発話音声を送信し、Azure AI Speech で採点する。
+ユーザーの発話音声を送信し、Azure AI Speech で発音採点を行う。
+
+backendは採点結果を `training_attempts` に保存する。
 
 ### Assessment history
 
 ```text
-GET /api/assessments?userId={userId}
+GET /api/training-attempts?clientId={clientId}&limit={limit}
 ```
 
-browser-local identifier に紐づく採点履歴を取得する。
+browser-local `client_id` に紐づく直近の採点履歴を取得する。
+
+このAPIは、専用の履歴画面で使用する想定である。
+
+### Latest score by sentence
+
+```text
+GET /api/sentence-latest-scores?clientId={clientId}
+```
+
+定型文ごとの最新採点結果を取得する。
+
+発音練習画面で、各定型文の最新scoreを表示するために使用する。
 
 ### Reference audio generation
 
 ```text
-POST /api/reference-audio/generate
+POST /api/sentence-templates/{templateId}/sample-audio
 ```
 
-見本音声が存在しない場合に、Roger / Sarah の音声を生成する。
+固定定型文のRoger見本音声を生成または再利用する。
 
-Frontend から送る値は以下のみ。
+frontendから送る値は `templateId` のみ。
 
-```json
-{
-  "phraseId": "001",
-  "voiceName": "roger"
-}
-```
+backendが以下を決定する。
 
-Backend が以下を決定する。
-
-- reference text
-- ElevenLabs voice_id
-- model_id
+- sample audio text
+- ElevenLabs voice ID
+- model ID
 - storage path
 
 ---
 
-## 11. DB / Storage
+## 12. DB / Storage
 
 詳細は以下の設計書に定義する。
 
@@ -297,24 +334,25 @@ Phase 1 の基本方針:
 - Storage: Supabase Storage
 - Storage bucket: `reference-audio`
 - Bucket access: Public
-- 見本音声 path: `preset/{phrase_id}/{voice_name}.mp3`
+- 見本音声 path: `preset/{sentence_template_id}/roger.mp3`
+- 見本音声メタデータは `sentence_template_audios` で管理する
 - `audio_assets` テーブルは Phase 1 では作らない
 
 ---
 
-## 12. エラー処理
+## 13. エラー処理
 
 ### Azure AI Speech
 
 - `RecognitionStatus` に応じて表示を切り替える
 - NoMatch / timeout / error などをユーザーに分かる形で表示する
-- raw JSON はデバッグ用に保持する
+- backend側の予期しないエラーはログに出す
 
 ### ElevenLabs
 
 - 生成失敗時はエラーを表示する
 - 壊れた音声ファイルを保存しない
-- 次回再生時に再試行できるようにする
+- `audio_path` が存在しない場合は、次回再生時に再試行できるようにする
 
 ### Supabase Storage
 
@@ -323,7 +361,7 @@ Phase 1 の基本方針:
 
 ---
 
-## 13. セキュリティ方針
+## 14. セキュリティ方針
 
 ### SQL Injection
 
@@ -348,36 +386,39 @@ Phase 1 の基本方針:
 
 - Supabase service role key は Frontend に出さない
 - ElevenLabs API key は Backend の環境変数で管理する
+- Azure Speech key は Backend の環境変数で管理する
 
 ---
 
-## 14. 受け入れ条件
+## 15. 受け入れ条件
 
 Phase 1 MVP の完了条件:
 
-- 固定定型文一覧を表示できる
+- 固定定型文カテゴリを表示できる
+- カテゴリごとの固定定型文一覧を表示できる
 - 固定定型文を選択できる
-- Roger / Sarah の見本音声ボタンを表示できる
-- 事前生成済みの見本音声を再生できる
+- Roger の見本音声を再生できる
 - 未生成の見本音声を初回再生時に生成できる
 - 生成済みMP3をSupabase Storageに保存できる
 - 保存済みMP3を再利用できる
 - ユーザー音声を送信してAzure AI Speechで採点できる
 - 採点結果を画面に表示できる
 - 採点結果をDBに保存できる
+- 定型文ごとの最新scoreを表示できる
 - 最低限の履歴を確認できる
 - AWS上で公開できる
 - READMEとdocsで設計意図を説明できる
 
 ---
 
-## 15. Phase 2へ延期するもの
+## 16. Phase 2へ延期するもの
 
 - 本格的な認証
 - デバイス間同期
 - ユーザー定型文
 - ユーザー定型文向けの音声管理
 - `audio_assets` テーブル
+- Sarah対応
 - voice選択UI
 - 再生成UI
 - スピード変更
@@ -390,7 +431,7 @@ Phase 1 MVP の完了条件:
 
 ---
 
-## 16. 面接での説明ポイント
+## 17. 面接での説明ポイント
 
 ### Phase 1 のスコープ判断
 
@@ -402,14 +443,19 @@ Phase 1 MVP の完了条件:
 > I scoped audio persistence to reference audio only in Phase 1, treating it as a TTS cache rather than a full audio management feature.  
 > This avoids unnecessary ElevenLabs API calls and improves playback speed, while keeping the scope focused.
 
+### Roger固定の判断
+
+> In Phase 1, I use one fixed sample voice to keep the user flow simple and reduce implementation complexity.  
+> Multiple voices and voice selection can be added later, but they are not required to validate the core pronunciation training flow.
+
 ### Public URL
 
 > In an enterprise context, I would proxy audio through the backend or use signed URLs.  
 > For Phase 1, since all reference audio is fixed and shared across users, I used public URLs to keep the scope focused.  
-> I plan to reconsider protected audio delivery in Phase 2 when authentication and user-defined phrases are introduced.
+> I plan to reconsider protected audio delivery when authentication and user-defined phrases are introduced.
 
 ### browser-local identifier
 
 > Phase 1 does not include full authentication.  
-> Instead, I use a browser-local identifier to keep user history with minimal complexity.  
-> Authentication is deferred to Phase 2.
+> Instead, I use a browser-local client ID to keep user history with minimal complexity.  
+> Authentication is deferred to a later phase.

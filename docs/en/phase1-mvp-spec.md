@@ -228,7 +228,35 @@ Main fields:
 
 ---
 
-## 9. Basic History
+## 9. Current Implementation Status
+
+As of the current Phase 1 implementation:
+
+- Fixed practice phrase categories are loaded from the backend.
+- Fixed practice phrases are loaded by category.
+- The frontend uses `display_text` for UI display.
+- The frontend uses `scoring_text` for Azure pronunciation assessment.
+- Browser recording is converted to WAV before submission.
+- Pronunciation assessment is executed through `POST /api/pronunciation/score`.
+- Assessment results are saved to `training_attempts`.
+- Roger sample audio is generated through `POST /api/sentence-templates/{templateId}/sample-audio`.
+- Generated sample audio is stored in Supabase Storage.
+- Existing sample audio is reused through its public URL.
+- The latest score for each sentence is fetched through `GET /api/sentence-latest-scores`.
+- The pronunciation practice page shows the latest score for each sentence.
+- A dedicated history screen is the next implementation target.
+
+Current implementation notes:
+
+- Phase 1 uses a browser-local `client_id`.
+- Authentication is still out of scope.
+- User-recorded audio is not stored.
+- The free-text TTS endpoint is not part of the current Phase 1 user flow.
+- Full progress charts are deferred until the history data flow is stable.
+
+---
+
+## 10. Basic History
 
 Phase 1 provides basic assessment history.
 
@@ -247,9 +275,9 @@ Phase 1 provides basic assessment history.
 
 ---
 
-## 10. API Requirements
+## 11. API Requirements
 
-Phase 1 assumes the following minimal APIs.
+Phase 1 currently uses the following APIs.
 
 ### Practice Phrases
 
@@ -258,7 +286,7 @@ GET /api/sentence-categories
 GET /api/sentence-templates?categoryId={categoryId}
 ```
 
-Fetch fixed practice phrases.
+Fetch fixed practice phrase categories and templates.
 
 ### Pronunciation Assessment
 
@@ -268,13 +296,27 @@ POST /api/pronunciation/score
 
 Submit user speech audio and run Azure AI Speech pronunciation assessment.
 
+The backend also saves the assessment result to `training_attempts`.
+
 ### Assessment History
 
 ```text
-GET /api/training-attempts?clientId={clientId}
+GET /api/training-attempts?clientId={clientId}&limit={limit}
 ```
 
-Fetch assessment history linked to the browser-local identifier.
+Fetch recent assessment attempts linked to the browser-local identifier.
+
+This API is intended for the dedicated history screen.
+
+### Latest Score by Sentence
+
+```text
+GET /api/sentence-latest-scores?clientId={clientId}
+```
+
+Fetch the latest assessment result for each sentence.
+
+This is used by the pronunciation practice page to show the latest score for each fixed practice sentence.
 
 ### Reference Audio Generation
 
@@ -282,27 +324,20 @@ Fetch assessment history linked to the browser-local identifier.
 POST /api/sentence-templates/{templateId}/sample-audio
 ```
 
-Generate reference audio when the fixed phrase audio file does not exist.
+Generate or reuse Roger sample audio for a fixed practice sentence.
 
-Frontend sends only:
-
-```json
-{
-  "phraseId": "001",
-  "voiceName": "roger"
-}
-```
+Frontend sends only the template ID.
 
 The backend derives:
 
-- reference text
+- sample audio text
 - ElevenLabs voice ID
 - model ID
 - storage path
 
 ---
 
-## 11. DB / Storage
+## 12. DB / Storage
 
 Detailed DB / Storage design is defined in:
 
@@ -322,7 +357,7 @@ Phase 1 policy:
 
 ---
 
-## 12. Error Handling
+## 13. Error Handling
 
 ### Azure AI Speech
 
@@ -343,7 +378,7 @@ Phase 1 policy:
 
 ---
 
-## 13. Security Policy
+## 14. Security Policy
 
 ### SQL Injection
 
@@ -370,7 +405,7 @@ Phase 1 policy:
 
 ---
 
-## 14. Acceptance Criteria
+## 15. Acceptance Criteria
 
 Phase 1 MVP is complete when:
 
@@ -390,7 +425,7 @@ Phase 1 MVP is complete when:
 
 ---
 
-## 15. Deferred to Phase 2
+## 16. Deferred to Phase 2
 
 The following items are deferred to Phase 2 or later:
 
@@ -411,7 +446,7 @@ The following items are deferred to Phase 2 or later:
 
 ---
 
-## 16. Interview Explanation Points
+## 17. Interview Explanation Points
 
 ### Phase 1 Scope
 
@@ -427,10 +462,10 @@ The following items are deferred to Phase 2 or later:
 
 > In an enterprise context, I would proxy audio through the backend or use signed URLs.  
 > For Phase 1, since all reference audio is fixed and shared across users, I used public URLs to keep the scope focused.  
-> I plan to reconsider protected audio delivery in Phase 2 when authentication and user-defined phrases are introduced.
+> I plan to reconsider protected audio delivery when authentication and user-defined phrases are introduced.
 
 ### Browser-local Identifier
 
 > Phase 1 does not include full authentication.  
-> Instead, I use a browser-local identifier to keep user history with minimal complexity.  
-> Authentication is deferred to Phase 2.
+> Instead, I use a browser-local client ID to keep user history with minimal complexity.  
+> Authentication is deferred to a later phase.
