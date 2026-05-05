@@ -1,3 +1,5 @@
+import { API_BASE_URL } from "@/lib/config/config";
+
 export type SentenceCategory = {
   id: string;
   categoryKey: string;
@@ -17,9 +19,6 @@ export type SentenceTemplate = {
   difficulty: string;
   sortOrder: number;
 };
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
 export async function fetchSentenceCategories(): Promise<SentenceCategory[]> {
   const response = await fetch(`${API_BASE_URL}/api/sentence-categories`);

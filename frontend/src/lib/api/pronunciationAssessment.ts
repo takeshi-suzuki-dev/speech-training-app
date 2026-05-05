@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "@/lib/config/config";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
 import { getOrCreateClientId } from "../clientId";
 
@@ -14,13 +15,10 @@ export async function scorePronunciation(
 
   if (sentenceId) formData.append("sentenceId", sentenceId);
 
-  const response = await fetch(
-    "http://localhost:8080/api/pronunciation/score",
-    {
-      method: "POST",
-      body: formData,
-    },
-  );
+  const response = await fetch(`${API_BASE_URL}/api/pronunciation/score`, {
+    method: "POST",
+    body: formData,
+  });
 
   if (!response.ok) {
     throw new Error(getSpeechApiErrorMessage(response.status));

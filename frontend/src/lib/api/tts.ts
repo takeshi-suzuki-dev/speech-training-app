@@ -1,3 +1,5 @@
+import { API_BASE_URL } from "@/lib/config/config";
+
 export type SampleAudioResponse = {
   audioPath: string;
   audioUrl: string;
@@ -5,7 +7,7 @@ export type SampleAudioResponse = {
 };
 
 export async function generateSampleSpeech(text: string): Promise<Blob> {
-  const response = await fetch("http://localhost:8080/api/tts", {
+  const response = await fetch(`${API_BASE_URL}/api/tts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
@@ -38,7 +40,7 @@ export async function generateTemplateSampleAudio(
   templateId: string,
 ): Promise<SampleAudioResponse> {
   const response = await fetch(
-    `http://localhost:8080/api/sentence-templates/${templateId}/sample-audio`,
+    `${API_BASE_URL}/api/sentence-templates/${templateId}/sample-audio`,
     {
       method: "POST",
     },

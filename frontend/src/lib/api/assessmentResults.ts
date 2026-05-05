@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "@/lib/config/config";
 import { getOrCreateClientId } from "@/lib/clientId";
 
 export type TrainingAttemptResult = {
@@ -19,17 +20,19 @@ export type TrainingAttemptResult = {
   createdAt: string;
 };
 
-export async function fetchAssessmentResults(
-  limit = 50,
-): Promise<TrainingAttemptResult[]> {
+export async function fetchLatestAssessmentResultsBySentence(): Promise<
+  TrainingAttemptResult[]
+> {
   const clientId = getOrCreateClientId();
 
   const response = await fetch(
-    `http://localhost:8080/api/training-attempts?clientId=${clientId}&limit=${limit}`,
+    `${API_BASE_URL}/api/sentence-latest-scores?clientId=${clientId}`,
   );
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch assessment results: ${response.status}`);
+    throw new Error(
+      `Failed to fetch latest assessment results by sentence: ${response.status}`,
+    );
   }
 
   return response.json();

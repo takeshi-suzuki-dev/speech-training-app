@@ -1,18 +1,14 @@
-const CLIENT_ID_KEY = "speech-training-client-id";
+import { CLIENT_ID_STORAGE_KEY } from "@/lib/constants";
 
 export function getOrCreateClientId(): string {
-  if (typeof window === "undefined") {
-    throw new Error("clientId is only available in the browser.");
-  }
-
-  const existingClientId = window.localStorage.getItem(CLIENT_ID_KEY);
+  const existingClientId = localStorage.getItem(CLIENT_ID_STORAGE_KEY);
 
   if (existingClientId) {
     return existingClientId;
   }
 
   const newClientId = crypto.randomUUID();
-  window.localStorage.setItem(CLIENT_ID_KEY, newClientId);
+  localStorage.setItem(CLIENT_ID_STORAGE_KEY, newClientId);
 
   return newClientId;
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  fetchAssessmentResults,
+  fetchLatestAssessmentResultsBySentence,
   TrainingAttemptResult,
 } from "@/lib/api/assessmentResults";
 import { scorePronunciation } from "@/lib/api/pronunciationAssessment";
@@ -265,7 +265,7 @@ export default function PronunciationPage() {
 
     const loadAssessmentResults = async () => {
       try {
-        const attempts = await fetchAssessmentResults(50);
+        const attempts = await fetchLatestAssessmentResultsBySentence();
 
         if (ignore) {
           return;
@@ -556,7 +556,7 @@ export default function PronunciationPage() {
       setExpandedWord(null);
       setScored(true);
 
-      const attempts = await fetchAssessmentResults(50);
+      const attempts = await fetchLatestAssessmentResultsBySentence();
       setTemplateLatestScores(buildTemplateLatestScores(attempts));
     } catch (error) {
       setErrorMessage(
