@@ -12,7 +12,7 @@ This application helps English learners improve their pronunciation through:
 
 - Speech recording and pronunciation assessment (Azure AI)
 - Sample audio generation (ElevenLabs)
-- Visual feedback and progress tracking (planned)
+- Visual feedback and progress tracking
 
 ---
 
@@ -112,15 +112,14 @@ Next implementation target:
 
 - Dedicated history screen
 - Basic assessment history list
-- Simple score trend visualization
+- Build a dedicated history screen
+- Visualize learning progress
+- Add moving averages and simple trend charts
 
 ---
 
 ## Future Plans
 
-- Build a dedicated history screen
-- Visualize learning progress
-- Add moving averages and simple trend charts
 - Add feedback generation
 - Support user-defined practice phrases
 - Support free speaking practice in a later phase
