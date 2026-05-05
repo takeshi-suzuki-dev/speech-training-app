@@ -1,8 +1,8 @@
 package com.takeshi.backend.dto.response;
 
-import com.takeshi.backend.entity.SentenceTemplate;
-
 import java.util.UUID;
+
+import com.takeshi.backend.entity.SentenceTemplate;
 
 public record SentenceTemplateResponse(
         UUID id,
@@ -13,8 +13,7 @@ public record SentenceTemplateResponse(
         String scoringText,
         String sampleAudioText,
         String difficulty,
-        Integer sortOrder
-) {
+        Integer sortOrder) {
     public static SentenceTemplateResponse from(SentenceTemplate template) {
         return new SentenceTemplateResponse(
                 template.getId(),
@@ -25,7 +24,6 @@ public record SentenceTemplateResponse(
                 template.getScoringText(),
                 template.getSampleAudioText(),
                 template.getDifficulty(),
-                template.getSortOrder()
-        );
+                template.getSortOrder());
     }
 }

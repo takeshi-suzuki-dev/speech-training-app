@@ -1,5 +1,20 @@
 package com.takeshi.backend.service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,16 +23,6 @@ import com.takeshi.backend.dto.response.SentenceScores;
 import com.takeshi.backend.dto.response.SpeechEvaluateResponse;
 import com.takeshi.backend.dto.response.WordResult;
 import com.takeshi.backend.exception.AzureSpeechApiException;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
-
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
 
 @Service
 public class PronunciationService {
@@ -68,11 +73,10 @@ public class PronunciationService {
     private SpeechEvaluateResponse callAzureAndMapResponse(MultipartFile audio, String referenceText) {
         try {
             var paJson = buildPronunciationAssessmentJson(referenceText);
-            var paBase64 = Base64.getEncoder().encodeToString(
-                    paJson.getBytes(StandardCharsets.UTF_8)
-            );
+            var paBase64 = Base64.getEncoder().encodeToString(paJson.getBytes(StandardCharsets.UTF_8));
 
-            var url = "https://" + speechRegion
+            var url = "https://"
+                    + speechRegion
                     + ".stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1"
                     + "?language=en-US&format=detailed";
 
@@ -81,15 +85,12 @@ public class PronunciationService {
                     .header("Ocp-Apim-Subscription-Key", speechKey)
                     .header("Content-Type", "audio/wav")
                     .header("Pronunciation-Assessment", paBase64)
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(audio.getBytes()))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(audio.getBytes())).build();
 
             var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new AzureSpeechApiException(
-                        response.statusCode(),
-                        "Azure Speech API error: " + response.statusCode()
-                );
+                throw new AzureSpeechApiException(response.statusCode(),
+                        "Azure Speech API error: " + response.statusCode());
             }
 
             return mapAzureResponse(response.body());

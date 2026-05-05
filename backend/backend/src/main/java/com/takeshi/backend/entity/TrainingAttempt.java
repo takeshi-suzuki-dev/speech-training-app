@@ -1,14 +1,19 @@
 package com.takeshi.backend.entity;
 
-import jakarta.persistence.*;
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+import java.util.UUID;
+
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UuidGenerator;
 import org.hibernate.type.SqlTypes;
 
-import java.math.BigDecimal;
-import java.time.OffsetDateTime;
-import java.util.UUID;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "training_attempts")
@@ -85,8 +90,7 @@ public class TrainingAttempt {
             BigDecimal prosodyScore,
             String wordsJson,
             Integer audioDurationMs,
-            OffsetDateTime scoredAt
-    ) {
+            OffsetDateTime scoredAt) {
         this.clientId = clientId;
         this.userId = userId;
         this.mode = mode;

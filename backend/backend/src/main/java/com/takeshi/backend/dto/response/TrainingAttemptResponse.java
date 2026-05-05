@@ -1,10 +1,10 @@
 package com.takeshi.backend.dto.response;
 
-import com.takeshi.backend.entity.TrainingAttempt;
-
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
+
+import com.takeshi.backend.entity.TrainingAttempt;
 
 public record TrainingAttemptResponse(
         UUID id,
@@ -22,8 +22,7 @@ public record TrainingAttemptResponse(
         String wordsJson,
         Integer audioDurationMs,
         OffsetDateTime scoredAt,
-        OffsetDateTime createdAt
-) {
+        OffsetDateTime createdAt) {
     public static TrainingAttemptResponse from(TrainingAttempt attempt) {
         return new TrainingAttemptResponse(
                 attempt.getId(),
@@ -41,7 +40,6 @@ public record TrainingAttemptResponse(
                 attempt.getWordsJson(),
                 attempt.getAudioDurationMs(),
                 attempt.getScoredAt(),
-                attempt.getCreatedAt()
-        );
+                attempt.getCreatedAt());
     }
 }

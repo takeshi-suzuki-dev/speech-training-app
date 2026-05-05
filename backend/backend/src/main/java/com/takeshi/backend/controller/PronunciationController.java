@@ -1,5 +1,19 @@
 package com.takeshi.backend.controller;
 
+import java.math.BigDecimal;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.takeshi.backend.dto.request.CreateTrainingAttemptRequest;
@@ -7,15 +21,6 @@ import com.takeshi.backend.dto.response.SentenceScores;
 import com.takeshi.backend.dto.response.SpeechEvaluateResponse;
 import com.takeshi.backend.service.PronunciationService;
 import com.takeshi.backend.service.TrainingAttemptService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
-
-import java.math.BigDecimal;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/pronunciation")
@@ -30,8 +35,7 @@ public class PronunciationController {
     public PronunciationController(
             PronunciationService pronunciationService,
             TrainingAttemptService trainingAttemptService,
-            ObjectMapper objectMapper
-    ) {
+            ObjectMapper objectMapper) {
         this.pronunciationService = pronunciationService;
         this.trainingAttemptService = trainingAttemptService;
         this.objectMapper = objectMapper;
@@ -43,8 +47,7 @@ public class PronunciationController {
             @RequestParam("referenceText") String referenceText,
             @RequestParam("clientId") UUID clientId,
             @RequestParam(value = "mode", defaultValue = "sentence") String mode,
-            @RequestParam(value = "sentenceId", required = false) UUID sentenceId
-    ) {
+            @RequestParam(value = "sentenceId", required = false) UUID sentenceId) {
 
         SpeechEvaluateResponse result = pronunciationService.score(audio, referenceText);
         SentenceScores scores = result.getSentenceScores();
@@ -64,9 +67,7 @@ public class PronunciationController {
                             scores != null ? toBigDecimal(scores.getCompleteness()) : null,
                             scores != null ? toBigDecimal(scores.getProsody()) : null,
                             toJsonOrNull(result.getWords()),
-                            null
-                    )
-            );
+                            null));
         } catch (Exception e) {
             logger.error("Failed to save training attempt.", e);
         }

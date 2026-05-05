@@ -16,6 +16,5 @@ public record CreateTrainingAttemptRequest(
         BigDecimal completenessScore,
         BigDecimal prosodyScore,
         String wordsJson,
-        Integer audioDurationMs
-) {
+        Integer audioDurationMs) {
 }

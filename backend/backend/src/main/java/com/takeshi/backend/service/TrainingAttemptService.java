@@ -1,16 +1,17 @@
 package com.takeshi.backend.service;
 
-import com.takeshi.backend.dto.request.CreateTrainingAttemptRequest;
-import com.takeshi.backend.dto.response.TrainingAttemptResponse;
-import com.takeshi.backend.entity.TrainingAttempt;
-import com.takeshi.backend.repository.TrainingAttemptRepository;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.UUID;
+
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.UUID;
+import com.takeshi.backend.dto.request.CreateTrainingAttemptRequest;
+import com.takeshi.backend.dto.response.TrainingAttemptResponse;
+import com.takeshi.backend.entity.TrainingAttempt;
+import com.takeshi.backend.repository.TrainingAttemptRepository;
 
 @Service
 public class TrainingAttemptService {
@@ -39,8 +40,7 @@ public class TrainingAttemptService {
                 request.prosodyScore(),
                 request.wordsJson(),
                 request.audioDurationMs(),
-                OffsetDateTime.now()
-        );
+                OffsetDateTime.now());
 
         TrainingAttempt saved = trainingAttemptRepository.save(attempt);
         return TrainingAttemptResponse.from(saved);
@@ -50,8 +50,7 @@ public class TrainingAttemptService {
     public List<TrainingAttemptResponse> findRecentByClientId(UUID clientId, int limit) {
         int safeLimit = Math.min(Math.max(limit, 1), 50);
 
-        return trainingAttemptRepository
-                .findByClientIdOrderByScoredAtDesc(clientId, PageRequest.of(0, safeLimit))
+        return trainingAttemptRepository.findByClientIdOrderByScoredAtDesc(clientId, PageRequest.of(0, safeLimit))
                 .stream()
                 .map(TrainingAttemptResponse::from)
                 .toList();

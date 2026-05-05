@@ -1,13 +1,18 @@
 package com.takeshi.backend.service;
 
-import com.takeshi.backend.exception.ElevenLabsApiException;
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.Map;
+import com.takeshi.backend.exception.ElevenLabsApiException;
 
 @Service
 public class TtsService {
@@ -21,10 +26,6 @@ public class TtsService {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    public byte[] generate(String text) {
-        return generate(text, voiceId, DEFAULT_MODEL_ID);
-    }
-
     public byte[] generate(String text, String voiceId, String modelId) {
         String url = "https://api.elevenlabs.io/v1/text-to-speech/" + voiceId;
 
@@ -33,10 +34,12 @@ public class TtsService {
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         Map<String, Object> body = Map.of(
-                "text", text,
-                "model_id", modelId != null ? modelId : DEFAULT_MODEL_ID,
-                "voice_settings", Map.of("speed", 0.9)
-        );
+                "text",
+                text,
+                "model_id",
+                modelId != null ? modelId : DEFAULT_MODEL_ID,
+                "voice_settings",
+                Map.of("speed", 0.9));
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
@@ -45,8 +48,7 @@ public class TtsService {
                     url,
                     HttpMethod.POST,
                     request,
-                    byte[].class
-            );
+                    byte[].class);
 
             return response.getBody();
         } catch (HttpStatusCodeException e) {
