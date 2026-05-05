@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/lib/config/config";
+import { API_BASE_URL } from "@/lib/config";
 import { getOrCreateClientId } from "@/lib/clientId";
 
 export type TrainingAttemptResult = {

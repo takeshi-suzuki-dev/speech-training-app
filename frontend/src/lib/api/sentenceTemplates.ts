@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/lib/config/config";
+import { API_BASE_URL } from "@/lib/config";
 
 export type SentenceCategory = {
   id: string;
