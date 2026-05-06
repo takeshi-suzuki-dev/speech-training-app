@@ -20,6 +20,17 @@ export type TrainingAttemptResult = {
   createdAt: string;
 };
 
+export type DailyScoreTrendResult = {
+  practiceDate: string;
+  overallAverage: number | null;
+  accuracyAverage: number | null;
+  fluencyAverage: number | null;
+  completenessAverage: number | null;
+  prosodyAverage: number | null;
+  overallMovingAverage5Days: number | null;
+  overallMovingAverage20Days: number | null;
+};
+
 export async function fetchLatestAssessmentResultsBySentence(): Promise<
   TrainingAttemptResult[]
 > {
@@ -33,6 +44,22 @@ export async function fetchLatestAssessmentResultsBySentence(): Promise<
     throw new Error(
       `Failed to fetch latest assessment results by sentence: ${response.status}`,
     );
+  }
+
+  return response.json();
+}
+
+export async function fetchDailyScoreTrends(): Promise<
+  DailyScoreTrendResult[]
+> {
+  const clientId = getOrCreateClientId();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/training-attempts/history-trends?clientId=${clientId}`,
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch daily score trends: ${response.status}`);
   }
 
   return response.json();

@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   fetchLatestAssessmentResultsBySentence,
   TrainingAttemptResult,
 } from "@/lib/api/assessmentResults";
+import AppNav from "@/app/components/AppNav";
 import { scorePronunciation } from "@/lib/api/pronunciationAssessment";
 import {
   fetchSentenceCategories,
@@ -614,22 +616,7 @@ export default function PronunciationPage() {
   return (
     <div className="min-h-screen bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
       {/* ── Nav ── */}
-      <nav className="sticky top-0 z-10 flex items-center gap-4 px-5 md:px-8 h-14 bg-white/85 backdrop-blur-md border-b border-purple-100">
-        <span className="mr-2 text-lg font-black bg-linear-to-r from-pink-400 to-violet-400 bg-clip-text text-transparent">
-          ✦ Speech Trainer
-        </span>
-        <span className="hidden md:inline text-sm font-bold text-purple-400 bg-purple-50 px-3 py-1 rounded-full">
-          Practice
-        </span>
-        <div className="ml-auto flex items-center gap-3">
-          <span className="flex items-center gap-1 bg-yellow-50 border-2 border-yellow-200 rounded-full px-3 py-1 text-xs font-bold text-yellow-700">
-            🔥 12
-          </span>
-          <div className="w-8 h-8 rounded-full bg-linear-to-br from-pink-300 to-violet-400 flex items-center justify-center text-sm">
-            🎤
-          </div>
-        </div>
-      </nav>
+      <AppNav />
 
       <div className="flex max-w-300 mx-auto md:gap-5 md:p-6">
         {/* ══════════════════════════════════════
