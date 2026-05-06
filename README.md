@@ -1,8 +1,8 @@
 # Speech Training App
 
-A pronunciation training application for English learners using Azure AI and ElevenLabs.
+A pronunciation training application for English learners using Azure AI Speech and ElevenLabs.
 
-This project starts with a Proof of Concept (PoC) to validate speech scoring and audio generation, and gradually evolves into a full learning application.
+This project started with a Proof of Concept (PoC) to validate pronunciation scoring and sample audio generation, and has now reached the Phase 1 MVP implementation.
 
 ---
 
@@ -10,9 +10,12 @@ This project starts with a Proof of Concept (PoC) to validate speech scoring and
 
 This application helps English learners improve their pronunciation through:
 
-- Speech recording and pronunciation assessment (Azure AI)
-- Sample audio generation (ElevenLabs)
-- Visual feedback and progress tracking
+- Speech recording and pronunciation assessment using Azure AI Speech
+- Template-based sample audio generation using ElevenLabs
+- Fixed practice phrase selection by category
+- Saved pronunciation assessment results
+- Latest score display for each practice sentence
+- Daily score trend charts and moving averages
 
 ---
 
@@ -20,10 +23,10 @@ This application helps English learners improve their pronunciation through:
 
 This project is developed in phases:
 
-- Phase 0: PoC (technical validation)
-- Phase 1: MVP (minimum usable product)
-- Phase 2: Release v1.0 (learning experience enhancement)
-- Phase 3: Release v2.0 (free speaking support)
+- Phase 0: PoC — completed
+- Phase 1: MVP implementation — completed
+- Phase 2: User-defined practice phrases and learning experience enhancement
+- Phase 3: Free speaking support
 
 For details:
 
@@ -54,16 +57,21 @@ For details:
 - Next.js
 - TypeScript
 - Tailwind CSS
+- Recharts
 
 ### Backend
 
 - Java
 - Spring Boot
+- Spring Data JPA
+- PostgreSQL
 
-### AI Services
+### AI / Cloud Services
 
-- Azure AI (Speech / Pronunciation Assessment)
-- ElevenLabs (Text-to-Speech)
+- Azure AI Speech / Pronunciation Assessment
+- ElevenLabs Text-to-Speech
+- Supabase PostgreSQL
+- Supabase Storage
 
 ---
 
@@ -71,57 +79,54 @@ For details:
 
 ### Phase 0 — Completed
 
-- Azure Speech pronunciation assessment API integrated in backend
-- ElevenLabs TTS API integrated for sample voice generation
-- Sample voice playback implemented in frontend
-- Key pronunciation assessment fields displayed in frontend
-- Word-level and phoneme-level response mapping implemented
-- Raw Azure JSON viewer implemented
-- Basic error handling implemented for Azure Speech and ElevenLabs
+The initial PoC verified the core pronunciation assessment flow.
 
-PoC scope delivered:
+Delivered scope:
 
-- transcript display
-- overall score display using Azure PronScore
-- sentence-level scores
-- word-level breakdown
-- phoneme-level breakdown
-- first / second phoneme candidates with scores
-- raw Azure JSON viewer
-- sample voice playback with a custom audio player
-- user-friendly error messages for basic API failures
+- Transcript display
+- Overall score display using Azure PronScore
+- Sentence-level scores
+- Word-level breakdown
+- Phoneme-level breakdown
+- First and second phoneme candidates with scores
+- Raw Azure JSON viewer for development/debugging
+- Sample voice playback with a custom audio player
+- User-friendly error messages for basic API failures
 
-### Phase 1 — In Progress
+### Phase 1 — Implementation Completed
 
-Phase 1 is currently focused on turning the PoC into a minimally usable pronunciation training app.
+Phase 1 turns the PoC into a minimally usable pronunciation training app.
 
-Implemented so far:
+Implemented scope:
 
-- Fixed practice phrase categories are loaded from the backend
-- Fixed practice phrases are loaded by category
-- The frontend uses `display_text` for UI display and `scoring_text` for Azure pronunciation assessment
-- Browser recording is converted to WAV and submitted for scoring
-- Pronunciation assessment results are saved to Supabase PostgreSQL
-- Roger sample audio is generated through `POST /api/sentence-templates/{templateId}/sample-audio`
-- Generated sample audio is stored in Supabase Storage and reused through public URLs
-- The latest score for each sentence is fetched through `GET /api/sentence-latest-scores`
-- Frontend configuration such as `API_BASE_URL` is centralized under `frontend/src/lib/config.ts`
-- Backend project directory has been flattened to `backend/`
-
-Next implementation target:
-
-- Dedicated history screen
-- Basic assessment history list
-- Build a dedicated history screen
-- Visualize learning progress
-- Add moving averages and simple trend charts
+- Fixed practice phrase categories loaded from the backend
+- Fixed practice phrases loaded by category
+- `display_text` used for UI display
+- `scoring_text` used for Azure pronunciation assessment
+- Browser recording converted to WAV and submitted for scoring
+- Pronunciation assessment executed through `POST /api/pronunciation/score`
+- Failed or invalid recognition results skipped from history persistence
+- Assessment results saved to Supabase PostgreSQL
+- Roger sample audio generated through `POST /api/sentence-templates/{templateId}/sample-audio`
+- Generated sample audio stored in Supabase Storage and reused through public URLs
+- Latest score for each sentence fetched through `GET /api/sentence-latest-scores`
+- History trend data fetched through `GET /api/training-attempts/history-trends`
+- Overall score trend chart implemented
+- Daily last-5 average, 5-practice-day moving average, and 20-practice-day moving average displayed
+- Score breakdown trend chart implemented for overall, accuracy, fluency, completeness, and prosody
+- Practice and History screens connected through shared navigation
+- Frontend configuration such as `API_BASE_URL` centralized under `frontend/src/lib/config.ts`
+- Backend project directory flattened to `backend/`
 
 ---
 
 ## Future Plans
 
+- Deploy the MVP to a public URL
+- Add user-defined practice phrases
+- Add user-defined sample audio generation
+- Improve history filtering and detailed analysis
 - Add feedback generation
-- Support user-defined practice phrases
 - Support free speaking practice in a later phase
 
 ---

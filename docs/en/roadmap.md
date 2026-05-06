@@ -1,191 +1,106 @@
-# Development Phases
+# Development Roadmap
 
-This project is developed in four phases:
+## Phase 0: PoC — Completed
 
-- **Phase 0**: PoC (Proof of Concept)
-- **Phase 1**: MVP (Minimum Viable Product)
-- **Phase 2**: Release v1.0 (Enhancing Learning Value)
-- **Phase 3**: Release v2.0 (Free Speaking Support)
+### Goal
 
----
+Validate the technical feasibility of the core pronunciation training flow.
 
-## Phase 0: PoC (Proof of Concept)
+### Delivered Scope
 
-### Objective
-
-- Validate whether the core features are technically feasible
-- Verify integration with external APIs (Azure AI / ElevenLabs)
-
----
-
-### Scope
-
-#### Azure AI (Pronunciation Assessment)
-
-- Display a fixed practice sentence
-- Select an audio file
-- Send audio and text to Azure AI
-- Retrieve evaluation results
-
-Displayed data:
-
-- Overall score
+- Azure AI Speech pronunciation assessment integration
+- ElevenLabs TTS integration
+- Transcript display
+- Overall score display using Azure PronScore
 - Sentence-level scores
-- Word-level scores
-- Phoneme-level scores
-- First and second detected candidates for each phoneme
-- Candidate scores for detected phoneme candidates
-- Full Azure API response (raw response)
+- Word-level breakdown
+- Phoneme-level breakdown
+- First and second phoneme candidates with scores
+- Raw Azure JSON viewer for development/debugging
+- Sample voice playback
+- Basic API error handling
 
 ---
 
-#### ElevenLabs (Text-to-Speech)
-
-- Call the API only when the "Generate Sample Audio" button is pressed
-- Retrieve generated sample audio
-- Play generated sample audio in the frontend
-- Display a user-friendly error message when audio generation fails
-
----
-
-### Out of Scope
-
-- Browser recording
-- WAV generation
-- Database integration
-- Feedback generation
-- UI/UX optimization
-- Learning features
-
----
-
-### Success Criteria
-
-- Audio can be sent successfully
-- Azure AI returns evaluation results
-- All score levels can be retrieved:
-  - overall
-  - sentence-level
-  - word
-  - phoneme candidates with scores
-- Raw Azure response can be inspected
-- ElevenLabs successfully generates audio
-- Generated audio can be played back
-- Basic error handling is implemented for Azure Speech and ElevenLabs
-
----
-
-## Phase 1: MVP (Minimum Viable Product)
-
-### Objective
-
-Turn the PoC into a minimally usable product.
-
----
-
-### Scope
-
-- Store evaluation results in a database
-- Manage multiple practice sentences by category
-- Display evaluation results in a well-organized single screen
-- Use a browser-local identifier as the Phase 1 `client_id`
-- Keep Phase 1 authentication-free
-- Switch result display based on Azure `RecognitionStatus`
-- Use Supabase PostgreSQL for Phase 1 data persistence
-- Use Supabase Storage for generated reference audio files
-- Implement minimal TTS caching for fixed practice sentences
-- Provide Roger sample audio for fixed practice sentences
-- Generate non-preloaded reference audio on first playback
-- Reuse stored MP3 files instead of calling ElevenLabs on every playback
-- Save pronunciation assessment results to `training_attempts`
-- Fetch the latest score for each sentence
-- Show the latest score in the practice phrase list
-- Visualize progress using line charts and bar charts
-- Add moving averages and daily aggregation
-
-### Notes
-
-- In Phase 1, user data is separated by a browser-local UUID
-- Cross-device sync is not supported in Phase 1
-- Full authentication is deferred to Phase 2
-- Reference audio persistence is limited to fixed practice sentences
-- User-recorded audio is not stored in Phase 1
-- User-defined practice sentences are deferred to Phase 2
-- Full audio management, voice selection, regeneration UI, and speed control are deferred to Phase 2
-- The browser-local identifier is implemented as a UUID stored in localStorage
-
----
+## Phase 1: MVP Implementation — Completed
 
 ### Goal
 
-A minimally usable pronunciation training application.
+Turn the PoC into a minimally usable pronunciation training app.
+
+### Delivered Scope
+
+- Fixed practice phrase categories
+- Fixed practice phrases by category
+- Template-based practice flow
+- `display_text`, `scoring_text`, and `sample_audio_text` separation
+- Roger fixed sample audio
+- Minimal TTS cache using Supabase Storage
+- Azure AI Speech pronunciation assessment
+- Valid assessment result persistence to `training_attempts`
+- Skipping failed or invalid recognition results from history persistence
+- Latest score display by sentence
+- Dedicated history screen
+- Overall Pron trend chart
+- Daily last-5 average
+- 5-practice-day moving average
+- 20-practice-day moving average
+- Score breakdown trend chart for overall, accuracy, fluency, completeness, and prosody
+- Practice / History navigation
+- README and docs update
+
+### Key Design Decisions
+
+- No full authentication in Phase 1
+- Browser-local `client_id` is used for history
+- User-recorded audio is not saved
+- Reference audio only is stored
+- Public URLs are used for fixed shared reference audio
+- Free-text TTS is not part of the Phase 1 user-facing flow
 
 ---
 
-## Phase 2: Release v1.0 (Enhancing Learning Value)
-
-### Objective
-
-Enhance learning experience and enable continuous usage.
-
----
-
-### Scope
-
-- Add filtering by phrase, category, and date range
-- Provide advice based on evaluation results
-- Allow users to add custom practice sentences
-- Generate sample audio for user-defined practice sentences
-- Extend reference audio management for user-defined practice sentences
-- Add full voice management features if needed
-- Add regeneration UI if needed
-- Add recording-time audio level detection and pre-submit checks
-
----
+## Phase 2: User-defined Practice Phrases / Learning Experience Enhancement
 
 ### Goal
 
-A practical application that supports continuous learning.
-
----
-
-## Phase 3: Release v2.0 (Free Speaking Support)
-
-### Objective
-
-Extend from fixed-sentence practice to free speaking.
-
----
+Allow users to create their own practice material and improve the learning experience.
 
 ### Scope
 
-- Add a themed free-response feature (within 2 minutes)
-- Extend the flow: recording → scoring → evaluation display
-- Decide UI integration (same screen or separate screen) before implementation
-- Add Sarah / female voice support if needed
+- User-defined practice phrases
+- User-defined categories if needed
+- Sample audio generation for user-defined phrases
+- Extended reference audio management
+- History filtering by sentence/category/date range
+- More detailed trend analysis
+- Weakness analysis
+- Advice based on assessment results
+- Authentication design and implementation if needed
+- Protected audio delivery if user-specific audio becomes sensitive
 
 ---
+
+## Phase 3: Free Speaking Support
 
 ### Goal
 
-An application that enables practical speaking practice.
+Support freer speaking practice beyond fixed templates.
+
+### Scope
+
+- Free speaking mode
+- Interview-answer practice mode
+- User-configured answer text
+- Question audio and answer sample audio
+- More flexible scoring and review flows
+- Plan-based usage limits if monetization is introduced
 
 ---
 
-## Overall Flow
+## Out of Scope for the Current Phase
 
-| Phase   | Focus                |
-| ------- | -------------------- |
-| Phase 0 | Validate feasibility |
-| Phase 1 | Make it usable       |
-| Phase 2 | Make it sustainable  |
-| Phase 3 | Make it practical    |
-
----
-
-## Design Intent
-
-- Validate external dependencies (Azure / ElevenLabs) first
-- Avoid over-engineering in the MVP phase
-- Gradually increase learning value
-- Defer complex features (free speaking) to later phases
+- Full production monetization
+- Large-scale user management
+- Multi-language expansion
+- Japanese-learning support

@@ -4,44 +4,30 @@
 
 This document defines the Phase 1 MVP specification for the pronunciation training app.
 
-The purpose of Phase 1 is to turn the technical PoC into a minimally usable pronunciation training application.
+The purpose of Phase 1 is to turn the PoC-validated technical components into a minimally usable pronunciation training application.
 
-The Phase 1 goal is to make the app usable for:
+Phase 1 is considered complete when the app can:
 
-- self-training
-- product demos
-- portfolio presentation
-- job interview discussions
-
-Phase 1 is considered successful when the app can:
-
-- provide fixed practice phrases
-- play reference audio
-- accept user speech input
-- display pronunciation assessment results from Azure AI Speech
-- store assessment results in the database
-- show basic history
-- be explained through a live URL, README, and documentation
+- Let users choose fixed practice sentences
+- Play sample audio
+- Submit recorded speech
+- Display Azure AI Speech pronunciation assessment results
+- Save valid assessment results to the database
+- Show the latest score for each sentence
+- Show history trend charts
+- Be explained through README, docs, and an English portfolio explanation
 
 ---
 
-## 2. Phase 1 Positioning
+## 2. Position of Phase 1
 
-Phase 1 is the MVP, or Minimum Viable Product.
+Phase 1 is the MVP.
 
-The PoC verifies that Azure AI Speech and ElevenLabs can be integrated technically.  
-Phase 1 organizes those technical pieces into a minimal product that users can actually try.
+The PoC validated Azure AI Speech and ElevenLabs integration.  
+Phase 1 organizes those technical components into a usable app.
 
-Phase 1 is not the final product.
-
-The following items are intentionally deferred to Phase 2 or later:
-
-- full authentication
-- user-defined practice phrases
-- full audio management
-- progress visualization
-- advanced advice generation
-- cross-device synchronization
+Phase 1 is not the final product.  
+Full authentication, user-defined phrases, full audio management, detailed analysis, and generated advice are deferred to later phases.
 
 ---
 
@@ -49,33 +35,44 @@ The following items are intentionally deferred to Phase 2 or later:
 
 ### In Scope
 
-- Manage multiple fixed practice phrases
-- Let users select a fixed practice phrase
-- Play Roger sample audio
-- Implement minimal TTS caching for ElevenLabs-generated audio
-- Run pronunciation assessment using Azure AI Speech
-- Display pronunciation assessment results
-- Store assessment results in Supabase PostgreSQL
-- Use a browser-local identifier for minimal user separation
-- Show basic assessment history
-- Deploy the application
-- Prepare README and documentation
-- Make the app explainable in English for interviews
+- Fixed practice phrase categories
+- Fixed practice phrases
+- Practice phrase selection
+- Separation of `display_text`, `scoring_text`, and `sample_audio_text`
+- Roger sample audio playback
+- Minimal TTS caching for generated sample audio
+- Supabase Storage persistence for sample audio
+- Azure AI Speech pronunciation assessment
+- Pronunciation assessment result display
+- Database persistence for valid assessment results
+- Skipping failed or invalid recognition results from history persistence
+- Browser-local `client_id` for simple user identification
+- Latest score display by sentence
+- History trend screen
+- Overall Pron trend chart
+- Daily last-5 average, 5-practice-day moving average, and 20-practice-day moving average
+- Score breakdown trend chart
+- README and docs update
+- Interview-ready English explanation
 
 ### Out of Scope
 
-- Full login / authentication
+- Full authentication
 - Cross-device synchronization
 - User-defined practice phrases
 - User-recorded audio persistence
 - Voice selection UI
+- Multiple sample voice switching such as Sarah
 - Regeneration UI
 - Speed control
-- Full audio management screen
-- Advanced progress charts
-- Advanced advice based on assessment results
-- Protected delivery of user-specific audio
-- Backend proxying for audio playback
+- Audio management screen
+- Date range filters
+- Sentence/category filters
+- Weakness analysis
+- Advanced advice generation
+- Protected delivery for user-specific audio
+- Backend proxy for audio playback
+- Free-text TTS API as a user-facing Phase 1 flow
 
 ---
 
@@ -83,94 +80,95 @@ The following items are intentionally deferred to Phase 2 or later:
 
 Phase 1 does not include full authentication.
 
-Instead, the app uses a browser-local identifier to associate assessment history with the current browser.
+Instead, it uses a browser-local `client_id` to connect assessment history to the current browser.
 
-Implementation detail:
-
-- Generate a UUID on first access
-- Store it in localStorage
-- Use it as `client_id` in Phase 1
+On first access, the frontend generates a UUID and saves it in localStorage.
 
 ### Policy
 
-- `client_id` is not an authenticated user ID
-- `user_id` is reserved for future authentication
+- `client_id` is a browser-local identifier
+- `user_id` is kept for future authenticated users
 - History can be linked within the same browser
-- Cross-device sync is not supported
-- Authentication is deferred to Phase 2
+- Cross-browser and cross-device synchronization is not supported
+- Authentication is deferred to a later phase
 
 ### Interview Explanation
 
 > Phase 1 does not include full authentication.  
-> Instead, I use a browser-local identifier to keep user history with minimal complexity.  
-> This allowed me to focus on the core scoring feedback loop first, while keeping the design flexible enough to add authentication in Phase 2.
+> Instead, I use a browser-local client ID to keep user history with minimal complexity.  
+> This allowed me to focus on the core scoring feedback loop first, while keeping the design flexible enough to add authentication later.
 
 ---
 
-## 5. Fixed Practice Phrases
+## 5. Fixed Practice Sentences
 
-Phase 1 does not allow users to add custom practice phrases.
+Phase 1 does not include user-defined sentence creation.
 
-Instead, the app provides multiple fixed practice phrases managed by the application.
+The app manages fixed practice sentences by category, and users choose from those sentences.
 
 ### Requirements
 
+- Store fixed practice phrase categories in the database
 - Store fixed practice phrases in the database
-- Support display order
-- Support active / inactive status
-- Let users select a practice phrase
-- Use the selected phrase as the reference text for pronunciation assessment
+- Fetch templates by category
+- Maintain display order
+- Support active/inactive records
+- Allow users to select a sentence
+- Use `display_text` for UI display
+- Use `scoring_text` for Azure pronunciation assessment
+- Use `sample_audio_text` for ElevenLabs sample audio generation
 
-### Deferred to Phase 2
+### Deferred to Phase 2 or Later
 
-- User-defined practice phrase creation
-- User-defined practice phrase editing
-- User-defined practice phrase deletion
-- Reference audio management for user-defined phrases
+- User-defined phrase creation
+- User-defined phrase editing
+- User-defined phrase deletion
+- Audio management for user-defined phrases
+- User-specific categories/templates
 
 ---
 
-## 6. Reference Audio
+## 6. Sample Audio
 
-Phase 1 provides one fixed sample voice:
+Phase 1 provides Roger sample audio for fixed practice sentences.
 
-- Roger
-
-### UI Concept
+### UI Image
 
 ```text
 Practice phrase
 
-[ Play sample audio ]
+[ Play sample · Roger ]
 ```
 
-The user can play the Roger sample audio.
+Users can play the Roger sample audio for the selected practice sentence.
 
 ### Policy
 
-- Roger is the fixed Phase 1 sample voice
-- Sarah may be added in Phase 2
+- Roger is fixed in Phase 1
 - No voice selection UI
+- No multiple voice switching such as Sarah
 - No speed control
 - No regeneration button
-- Reference audio files are stored in Supabase Storage
-- The frontend plays public URLs directly
-- Backend proxying is not used in Phase 1
+- Sample audio is stored in Supabase Storage
+- Frontend plays the public URL directly
+- Backend proxy is not used in Phase 1
 
 ### TTS Cache
 
-- Representative demo phrases are pre-generated
-- Other fixed phrase audio is generated on first playback
+- Sample audio is generated or reused through `POST /api/sentence-templates/{templateId}/sample-audio`
+- If `audio_path` already exists, the backend returns the public URL for the stored MP3
+- If `audio_path` does not exist, the backend generates audio through ElevenLabs and uploads it to Supabase Storage
 - Generated MP3 files are reused
 - ElevenLabs is not called on every playback
 
-### Deferred to Phase 2
+### Deferred
 
+- Sarah support
 - Voice selection
 - Regeneration UI
-- Full audio management
+- Audio management screen
 - Audio management for user-defined phrases
-- Backend proxying / signed URLs
+- Backend proxy / signed URLs
 
 ---
 
@@ -180,40 +178,46 @@ Phase 1 uses Azure AI Speech for pronunciation assessment.
 
 ### Input
 
-- Reference text
+- Reference/scoring text
 - User speech audio
+
+When a fixed sentence is selected, the frontend uses `scoring_text` for assessment.
 
 ### Output
 
-- Recognized transcript
+- Recognized text
 - Recognition status
-- Overall pronunciation score
+- Overall / Pron score
 - Accuracy score
 - Fluency score
 - Completeness score
+- Prosody score
 - Word-level details
 - Phoneme-level details
-- Raw JSON response
+- Phoneme candidates
 
 ### Display Policy
 
-Phase 1 displays the result in a clear single-screen layout.
+Phase 1 organizes assessment results into a readable single screen.
 
-At minimum, the UI should show:
+At minimum, the screen displays:
 
-- recognized transcript
-- overall score
-- accuracy / fluency / completeness scores
-- word-level assessment
-- error or no-match status when applicable
+- Recognized text
+- Overall score
+- Accuracy / fluency / completeness / prosody
+- Word-level assessment
+- Phoneme details for selected words
+- User-friendly error state
+
+The raw Azure JSON viewer used in the PoC is treated as a development/debugging tool and is not a core Phase 1 UI requirement.
 
 ---
 
 ## 8. Assessment Result Persistence
 
-Assessment results are stored in Supabase PostgreSQL.
+Assessment results are saved to `training_attempts` in Supabase PostgreSQL.
 
-Main fields:
+Main stored fields:
 
 - `client_id`
 - `user_id`
@@ -221,57 +225,124 @@ Main fields:
 - `sentence_id`
 - `reference_text`
 - `recognized_text`
+- `overall_score`
+- `accuracy_score`
+- `fluency_score`
+- `completeness_score`
+- `prosody_score`
+- `words_json`
 - `audio_duration_ms`
 - `scored_at`
+- `created_at`
 
-`words_json` may include word-level and phoneme-level details returned by Azure Speech.
+`words_json` stores word-level and phoneme-level details returned by Azure Speech.
 
----
+Phase 1 does not store user-recorded audio files.  
+Persisting the full raw Azure JSON is not a required Phase 1 feature.
 
-## 9. Current Implementation Status
+### Not Saved
 
-As of the current Phase 1 implementation:
+The backend does not save a training attempt when:
 
-- Fixed practice phrase categories are loaded from the backend.
-- Fixed practice phrases are loaded by category.
-- The frontend uses `display_text` for UI display.
-- The frontend uses `scoring_text` for Azure pronunciation assessment.
-- Browser recording is converted to WAV before submission.
-- Pronunciation assessment is executed through `POST /api/pronunciation/score`.
-- Assessment results are saved to `training_attempts`.
-- Roger sample audio is generated through `POST /api/sentence-templates/{templateId}/sample-audio`.
-- Generated sample audio is stored in Supabase Storage.
-- Existing sample audio is reused through its public URL.
-- The latest score for each sentence is fetched through `GET /api/sentence-latest-scores`.
-- The pronunciation practice page shows the latest score for each sentence.
-- A dedicated history screen is the next implementation target.
+- `RecognitionStatus` is not `Success`
+- Sentence-level scores are missing
+- PronScore / overall is missing
+- PronScore / overall is 0 or lower
 
-Current implementation notes:
-
-- Phase 1 uses a browser-local `client_id`.
-- Authentication is still out of scope.
-- User-recorded audio is not stored.
-- The free-text TTS endpoint is not part of the current Phase 1 user flow.
-- Full progress charts are deferred until the history data flow is stable.
+This prevents failed recognition results from polluting the history charts.
 
 ---
 
-## 10. Basic History
+## 9. History Screen
 
-Phase 1 provides basic assessment history.
+Phase 1 includes a dedicated history screen.
 
-### Requirements
+### Screen Structure
 
-- Fetch assessment history linked to the browser-local identifier
-- Show date/time, phrase, and score
-- Allow users to review previous attempts in a simple form
+The history screen has two tabs:
 
-### Deferred to Phase 2
+- Overall
+- Score Breakdown
 
-- Progress charts
-- Trend visualization
+Both tabs use data from `GET /api/training-attempts/history-trends`.
+
+### Overall Tab
+
+The Overall tab shows the trend for the overall Pron score.
+
+Lines displayed:
+
+- Daily last-5 average
+- 5-practice-day moving average
+- 20-practice-day moving average
+
+Aggregation rules:
+
+- Target period is the last year
+- `scored_at` is converted to a practice date using `Asia/Tokyo`
+- For each day, the latest five attempts are used
+- If a day has fewer than five attempts, all attempts for that day are used
+- 5-day and 20-day moving averages are calculated from the daily averages
+
+Supporting display:
+
+- If the latest daily average is the all-time best, show a high-score message
+- If the latest daily average is second best, show a second-best message
+- If the latest daily average is third best, show a third-best message
+- If the latest daily average is greater than or equal to the 5-day moving average, show a positive condition message
+- If the 5-day moving average is greater than or equal to the 20-day moving average, visually highlight the chart background
+
+### Score Breakdown Tab
+
+The Score Breakdown tab shows trends for sentence-level score items.
+
+Lines displayed:
+
+- Overall / Pron
+- Accuracy
+- Fluency
+- Completeness
+- Prosody
+
+Aggregation rules:
+
+- Each line shows the daily last-5 average for that score item
+- 5-day and 20-day moving averages are not shown in this tab
+
+### Deferred
+
+- Date range filters
+- Sentence/category filters
+- Configurable long-term averages
 - Weakness analysis
 - Advice generation
+
+---
+
+## 10. Current Implementation Status
+
+Phase 1 implementation is complete.
+
+Implemented:
+
+- Fixed practice phrase categories are loaded from the backend
+- Fixed practice phrases are loaded by category
+- `display_text` is used for UI display
+- `scoring_text` is used for Azure assessment
+- Browser recording is converted to WAV and submitted for scoring
+- Pronunciation assessment runs through `POST /api/pronunciation/score`
+- Failed or invalid recognition results are not saved to `training_attempts`
+- Valid assessment results are saved to `training_attempts`
+- Roger sample audio is generated or reused through `POST /api/sentence-templates/{templateId}/sample-audio`
+- Generated sample audio is stored in Supabase Storage
+- Existing sample audio is reused through public URLs
+- Latest score by sentence is fetched through `GET /api/sentence-latest-scores`
+- The practice screen shows the latest score for each fixed sentence
+- The history screen fetches chart data from `GET /api/training-attempts/history-trends`
+- Overall trend chart is implemented
+- Score breakdown trend chart is implemented
+- Practice and History screens are connected through shared navigation
+- Backend project directory has been flattened to `backend/`
 
 ---
 
@@ -296,17 +367,7 @@ POST /api/pronunciation/score
 
 Submit user speech audio and run Azure AI Speech pronunciation assessment.
 
-The backend also saves the assessment result to `training_attempts`.
-
-### Assessment History
-
-```text
-GET /api/training-attempts?clientId={clientId}&limit={limit}
-```
-
-Fetch recent assessment attempts linked to the browser-local identifier.
-
-This API is intended for the dedicated history screen.
+The backend saves the result to `training_attempts` only when recognition and scoring are valid.
 
 ### Latest Score by Sentence
 
@@ -317,6 +378,25 @@ GET /api/sentence-latest-scores?clientId={clientId}
 Fetch the latest assessment result for each sentence.
 
 This is used by the pronunciation practice page to show the latest score for each fixed practice sentence.
+
+### History Trends
+
+```text
+GET /api/training-attempts/history-trends?clientId={clientId}
+```
+
+Fetch daily aggregated data for history charts.
+
+The response includes:
+
+- Practice date
+- Daily last-5 average overall
+- Daily last-5 average accuracy
+- Daily last-5 average fluency
+- Daily last-5 average completeness
+- Daily last-5 average prosody
+- 5-practice-day moving average for overall
+- 20-practice-day moving average for overall
 
 ### Reference Audio Generation
 
@@ -330,30 +410,32 @@ Frontend sends only the template ID.
 
 The backend derives:
 
-- sample audio text
+- Sample audio text
 - ElevenLabs voice ID
-- model ID
-- storage path
+- Model ID
+- Storage path
 
 ---
 
 ## 12. DB / Storage
 
-Detailed DB / Storage design is defined in:
+Detailed DB and Storage design is defined in:
 
 ```text
 docs/en/phase1-db-storage-design.md
 docs/jp/phase1-db-storage-design.md
 ```
 
-Phase 1 policy:
+Basic Phase 1 policy:
 
 - DB: Supabase PostgreSQL
 - Storage: Supabase Storage
 - Storage bucket: `reference-audio`
 - Bucket access: Public
-- Reference audio path: `preset/{phrase_id}/{voice_name}.mp3`
-- No `audio_assets` table in Phase 1
+- Sample audio path: `preset/{sentence_template_id}/roger.mp3`
+- Sample audio metadata is managed by `sentence_template_audios`
+- Assessment results are managed by `training_attempts`
+- `audio_assets` table is not created in Phase 1
 
 ---
 
@@ -361,20 +443,22 @@ Phase 1 policy:
 
 ### Azure AI Speech
 
-- Switch result display based on `RecognitionStatus`
-- Show user-friendly messages for NoMatch, timeout, and error cases
-- Keep raw JSON for debugging
+- Display results based on `RecognitionStatus`
+- Show user-friendly messages for NoMatch / timeout / error cases
+- Do not save failed or invalid recognition results to history
+- Log unexpected backend errors
+- Treat raw JSON as development/debugging data when needed
 
 ### ElevenLabs
 
-- Show an error if generation fails
-- Do not store broken audio files
-- Allow retry on the next playback attempt
+- Show an error when generation fails
+- Do not save broken audio files
+- Retry generation on next playback when `audio_path` is missing
 
 ### Supabase Storage
 
-- Return an error if upload fails
-- If public URL playback fails, call the backend generation API
+- Return an error when upload fails
+- If public URL playback fails, call the backend generation API again
 
 ---
 
@@ -382,26 +466,28 @@ Phase 1 policy:
 
 ### SQL Injection
 
-- The frontend does not access the database directly
-- Database operations are handled by the backend
-- SQL must use parameter binding
-- SQL string concatenation must be avoided
+- Do not allow frontend to access the database directly
+- Keep database operations in the backend
+- Use parameter binding
+- Avoid SQL string concatenation
 
-### Storage Path Safety
+### Storage Path
 
-- Free text must not be used directly in storage paths
-- In Phase 1, storage paths are derived from `phrase_id` and `voice_name`
-- The backend manages storage path generation for upload operations
+- Do not use free text as a path
+- Generate paths from `sentence_template_id + voice_name`
+- Generate safe paths in the backend
 
 ### XSS
 
-- User-provided text must be rendered as plain text
-- `dangerouslySetInnerHTML` must not be used for user-defined phrase text in later phases
+- Do not render user input as HTML
+- Do not use `dangerouslySetInnerHTML`
+- Add character limits for future user-defined sentences
 
 ### Secret Management
 
-- Supabase service role key must never be exposed to the frontend
-- ElevenLabs API key must be managed as a backend environment variable
+- Do not expose Supabase service role key to the frontend
+- Manage ElevenLabs API key in backend environment variables
+- Manage Azure Speech key in backend environment variables
 
 ---
 
@@ -409,40 +495,43 @@ Phase 1 policy:
 
 Phase 1 MVP is complete when:
 
-- fixed practice phrases can be displayed
-- users can select a fixed practice phrase
+- Fixed phrase categories can be displayed
+- Fixed phrases can be displayed by category
+- A fixed phrase can be selected
 - Roger sample audio can be played
-- pre-generated demo phrase audio can be played
-- non-preloaded reference audio can be generated on first playback failure
-- generated MP3 files can be stored in Supabase Storage
-- stored MP3 files can be reused
-- user speech can be submitted for Azure AI Speech assessment
-- assessment results can be displayed
-- assessment results can be stored in the database
-- basic history can be viewed
-- the app can be deployed
+- Missing sample audio can be generated on first playback
+- Generated MP3 files can be stored in Supabase Storage
+- Stored MP3 files can be reused
+- User speech can be sent to Azure AI Speech for assessment
+- Assessment results can be displayed
+- Only valid recognition/scoring results are saved to the database
+- Latest score by sentence can be displayed
+- Overall Pron history chart can be displayed
+- Sentence-level score breakdown history chart can be displayed
+- Users can navigate between Practice and History
 - README and docs explain the design decisions
 
 ---
 
-## 16. Deferred to Phase 2
+## 16. Deferred to Phase 2 or Later
 
-The following items are deferred to Phase 2 or later:
-
-- full authentication
-- cross-device synchronization
-- user-defined practice phrases
-- audio management for user-defined phrases
+- Full authentication
+- Cross-device synchronization
+- User-defined practice phrases
+- Audio management for user-defined phrases
 - `audio_assets` table
-- voice selection UI
-- regeneration UI
-- speed control
-- audio deletion
-- backend proxying / signed URLs
-- progress charts
-- advice based on assessment results
-- advanced audio management
-- user-recorded audio persistence
+- Sarah support
+- Voice selection UI
+- Regeneration UI
+- Speed control
+- Audio deletion
+- Backend proxy / signed URL
+- Date range filters
+- Sentence/category filters
+- Weakness analysis
+- Advice based on assessment results
+- Advanced audio management
+- User-recorded audio persistence
 
 ---
 
@@ -450,13 +539,25 @@ The following items are deferred to Phase 2 or later:
 
 ### Phase 1 Scope
 
-> Phase 1 focuses on the core scoring feedback loop.  
+> Phase 1 focuses on the core pronunciation training loop: choosing a fixed sentence, listening to sample audio, recording speech, receiving assessment results, and reviewing progress.  
 > I intentionally deferred authentication, user-defined phrases, and full audio management to keep the MVP focused.
 
 ### TTS Cache
 
 > I scoped audio persistence to reference audio only in Phase 1, treating it as a TTS cache rather than a full audio management feature.  
 > This avoids unnecessary ElevenLabs API calls and improves playback speed, while keeping the scope focused.
+
+### Fixed Roger Voice
+
+> In Phase 1, I use one fixed sample voice to keep the user flow simple and reduce implementation complexity.  
+> Multiple voices and voice selection can be added later, but they are not required to validate the core pronunciation training flow.
+
+### History Charts
+
+> The history screen aggregates pronunciation scores by practice day.  
+> For each day, it uses the last five attempts to calculate the daily average.  
+> The overall chart shows daily average, 5-practice-day moving average, and 20-practice-day moving average.  
+> The score breakdown chart shows trends for overall, accuracy, fluency, completeness, and prosody.
 
 ### Public URL
 
