@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.takeshi.backend.dto.request.CreateTrainingAttemptRequest;
+import com.takeshi.backend.dto.response.DailyScoreTrendResponse;
 import com.takeshi.backend.dto.response.TrainingAttemptResponse;
 import com.takeshi.backend.service.TrainingAttemptService;
 
@@ -37,5 +38,10 @@ public class TrainingAttemptController {
             @RequestParam UUID clientId,
             @RequestParam(defaultValue = "20") int limit) {
         return trainingAttemptService.findRecentByClientId(clientId, limit);
+    }
+
+    @GetMapping("/history-trends")
+    public List<DailyScoreTrendResponse> findDailyScoreTrends(@RequestParam UUID clientId) {
+        return trainingAttemptService.findDailyScoreTrends(clientId);
     }
 }

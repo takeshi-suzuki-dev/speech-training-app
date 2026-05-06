@@ -52,6 +52,15 @@ public class PronunciationController {
         SpeechEvaluateResponse result = pronunciationService.score(audio, referenceText);
         SentenceScores scores = result.getSentenceScores();
 
+        if (!shouldSaveTrainingAttempt(result)) {
+            logger.info(
+                    "Skip saving training attempt. recognitionStatus={}, pronScore={}",
+                    result.getRecognitionStatus(),
+                    scores != null ? scores.getPron() : null);
+
+            return ResponseEntity.ok(result);
+        }
+
         try {
             trainingAttemptService.create(
                     new CreateTrainingAttemptRequest(
@@ -73,6 +82,24 @@ public class PronunciationController {
         }
 
         return ResponseEntity.ok(result);
+    }
+
+    private boolean shouldSaveTrainingAttempt(SpeechEvaluateResponse result) {
+        if (result == null) {
+            return false;
+        }
+
+        if (!"Success".equalsIgnoreCase(result.getRecognitionStatus())) {
+            return false;
+        }
+
+        SentenceScores scores = result.getSentenceScores();
+
+        if (scores == null || scores.getPron() == null) {
+            return false;
+        }
+
+        return scores.getPron() > 0;
     }
 
     private BigDecimal toBigDecimal(Number value) {

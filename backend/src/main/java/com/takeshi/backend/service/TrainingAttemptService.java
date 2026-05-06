@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.takeshi.backend.dto.request.CreateTrainingAttemptRequest;
+import com.takeshi.backend.dto.response.DailyScoreTrendResponse;
 import com.takeshi.backend.dto.response.TrainingAttemptResponse;
 import com.takeshi.backend.entity.TrainingAttempt;
 import com.takeshi.backend.repository.TrainingAttemptRepository;
@@ -53,6 +54,27 @@ public class TrainingAttemptService {
         return trainingAttemptRepository.findByClientIdOrderByScoredAtDesc(clientId, PageRequest.of(0, safeLimit))
                 .stream()
                 .map(TrainingAttemptResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<DailyScoreTrendResponse> findDailyScoreTrends(UUID clientId) {
+        if (clientId == null) {
+            throw new IllegalArgumentException("clientId is required.");
+        }
+
+        return trainingAttemptRepository.findDailyScoreTrends(clientId)
+                .stream()
+                .map(
+                        trend -> new DailyScoreTrendResponse(
+                                trend.getPracticeDate(),
+                                trend.getOverallAverage(),
+                                trend.getAccuracyAverage(),
+                                trend.getFluencyAverage(),
+                                trend.getCompletenessAverage(),
+                                trend.getProsodyAverage(),
+                                trend.getOverallMovingAverage5Days(),
+                                trend.getOverallMovingAverage20Days()))
                 .toList();
     }
 
