@@ -137,3 +137,10 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Unnessesary documents
+AGENTS.md
+CLAUDE.md
+
+# DS_STORE
+.DS_STORE

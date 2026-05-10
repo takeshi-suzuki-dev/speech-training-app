@@ -24,9 +24,10 @@ This application helps English learners improve their pronunciation through:
 This project is developed in phases:
 
 - Phase 0: PoC — completed
-- Phase 1: MVP implementation — completed
-- Phase 2: User-defined practice phrases and learning experience enhancement
-- Phase 3: Free speaking support
+- Phase 1: Fixed-template MVP — completed
+- Phase 2: Authentication and user-defined practice sentences
+- Phase 3: Plan-based features, billing, and IT engineer vocabulary practice
+- Phase 4: Interview FAQ and free-answer practice
 
 For details:
 
@@ -122,12 +123,56 @@ Implemented scope:
 
 ## Future Plans
 
-- Deploy the MVP to a public URL
-- Add user-defined practice phrases
-- Add user-defined sample audio generation
-- Improve history filtering and detailed analysis
-- Add feedback generation
-- Support free speaking practice in a later phase
+### Phase 2 — Authentication and User-defined Practice Sentences
+
+Phase 2 introduces authentication because user-defined practice sentences may contain private career history, interview answers, and personal learning material.
+
+Planned scope:
+
+- Login / authentication
+- User management
+- Authenticated `user_id`
+- User-defined practice sentences
+- User-defined categories if needed
+- Sample audio generation for user-defined sentences
+- Pronunciation scoring for user-defined sentences
+- User-specific history
+- Access control for user-specific templates and audio
+- Protected handling for user-specific sample audio
+- Private bucket, signed URL, or backend-mediated audio delivery if needed
+
+### Phase 3 — Plan-based Features, Billing, and IT Engineer Vocabulary Practice
+
+Phase 3 introduces monetization and plan-based feature control.
+
+Planned scope:
+
+- Free / Basic / Plus / Pro plan design
+- Billing system integration
+- Subscription status management
+- Plan-based feature access
+- Daily scoring limits by plan
+- User-defined sentence features as upper-plan value
+- User-defined sample audio generation as upper-plan value
+- User-defined sentence scoring and history as upper-plan value
+- IT engineer vocabulary practice
+- Fixed-template practice and vocabulary practice as trial or lower-plan features
+- Transparent plan boundaries and pricing
+
+### Phase 4 — Interview FAQ and Free-answer Practice
+
+Phase 4 expands the app beyond fixed sentence practice.
+
+Planned scope:
+
+- Interview FAQ practice
+- Question prompts
+- Question audio
+- User answer text
+- Sample audio generation for user answers
+- Pronunciation scoring for user answers
+- History for interview-answer practice
+- Later free speaking mode
 
 ---
 

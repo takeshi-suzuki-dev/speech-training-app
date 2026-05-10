@@ -60,47 +60,138 @@ Turn the PoC into a minimally usable pronunciation training app.
 
 ---
 
-## Phase 2: User-defined Practice Phrases / Learning Experience Enhancement
+## Phase 2: Authentication and User-defined Practice Sentences
 
 ### Goal
 
-Allow users to create their own practice material and improve the learning experience.
+Allow authenticated users to safely create and practice their own sentences.
+
+User-defined practice sentences may contain private career history, interview answers, portfolio explanations, relocation reasons, and other personal learning material. For that reason, Phase 2 is designed on the assumption that user-defined templates and related audio are available only after login.
 
 ### Scope
 
-- User-defined practice phrases
-- User-defined categories if needed
-- Sample audio generation for user-defined phrases
-- Extended reference audio management
-- History filtering by sentence/category/date range
-- More detailed trend analysis
-- Weakness analysis
-- Advice based on assessment results
-- Authentication design and implementation if needed
-- Protected audio delivery if user-specific audio becomes sensitive
+- Login / authentication
+- User management
+- Authenticated `user_id`
+- User-owned practice sentences
+- User-owned categories if needed
+- Create / edit / delete user-defined practice sentences
+- Sample audio generation for user-defined sentences
+- Pronunciation scoring for user-defined sentences
+- User-specific history
+- Access control for user-specific data
+- Protected handling of user-specific sample audio
+- Private bucket, signed URL, or backend-mediated audio delivery if needed
+
+### Out of Scope
+
+- Billing system
+- Plan-based feature restrictions
+- Free-answer / interview FAQ practice
+- Full monetization workflow
+
+### Goal State
+
+Users can log in and safely practice with their own private interview answers and career-related sentences.
 
 ---
 
-## Phase 3: Free Speaking Support
+## Phase 3: Plan-based Features, Billing, and IT Engineer Vocabulary Practice
 
 ### Goal
 
-Support freer speaking practice beyond fixed templates.
+Introduce monetization, plan-based feature access, and additional practice value for IT engineers.
+
+Phase 3 defines which features belong to lower plans and which features become upper-plan value.
 
 ### Scope
 
-- Free speaking mode
-- Interview-answer practice mode
-- User-configured answer text
-- Question audio and answer sample audio
-- More flexible scoring and review flows
-- Plan-based usage limits if monetization is introduced
+- Free / Basic / Plus / Pro plan design
+- Billing system integration
+- Subscription status management
+- Plan-based feature access
+- Daily scoring limits by plan
+- User-defined sentence features as upper-plan value
+- User-defined sample audio generation as upper-plan value
+- User-defined sentence scoring and history as upper-plan value
+- IT engineer vocabulary practice
+- Fixed-template practice and vocabulary practice as trial or lower-plan features
+- Transparent plan boundaries and pricing
+
+### Example Plan Direction
+
+Lower plans may focus on:
+
+- Fixed practice sentences
+- IT engineer vocabulary practice
+- Limited scoring attempts
+- Basic history
+
+Upper plans may include:
+
+- User-defined practice sentences
+- User-defined sample audio generation
+- Pronunciation scoring for user-defined sentences
+- More scoring attempts
+- Interview-oriented practice value
+
+### Goal State
+
+The app has clear plan boundaries, billing, and a sustainable paid value proposition.
 
 ---
 
-## Out of Scope for the Current Phase
+## Phase 4: Interview FAQ and Free-answer Practice
 
-- Full production monetization
-- Large-scale user management
-- Multi-language expansion
-- Japanese-learning support
+### Goal
+
+Expand from sentence practice into interview question and free-answer practice.
+
+Phase 4 focuses on practicing answers to prompts rather than only repeating predefined sentences.
+
+### Scope
+
+- Interview FAQ practice
+- Question prompts
+- Question audio
+- User answer text
+- Sample audio generation for user answers
+- Pronunciation scoring for user answers
+- History for interview-answer practice
+- Later free speaking mode
+
+### Example Flow
+
+1. User chooses an interview question.
+2. User registers their own answer text.
+3. App plays question audio.
+4. App generates sample answer audio.
+5. User records their answer.
+6. App scores pronunciation and stores progress.
+
+### Goal State
+
+Users can practice personalized interview answers and gradually move toward freer speaking.
+
+---
+
+## Overall Flow
+
+| Phase   | Focus                                                           |
+| ------- | --------------------------------------------------------------- |
+| Phase 0 | Validate feasibility                                            |
+| Phase 1 | Make fixed-template practice usable                             |
+| Phase 2 | Add authentication and private user-defined practice            |
+| Phase 3 | Add plan-based monetization and IT engineer vocabulary practice |
+| Phase 4 | Add interview FAQ and free-answer practice                      |
+
+---
+
+## Design Intent
+
+- Validate external dependencies first
+- Keep Phase 1 focused on the core scoring loop
+- Introduce authentication before handling private user-defined material
+- Treat user-defined sentence practice as a high-value feature
+- Add plan and billing only after the authenticated user flow exists
+- Defer free-answer practice until the fixed and user-defined template flows are stable
