@@ -43,6 +43,15 @@ public class SentenceTemplateService {
     }
 
     @Transactional(readOnly = true)
+    public List<SentenceTemplateResponse> findUserTemplatesByFirebaseUid(String firebaseUid) {
+        return sentenceTemplateRepository
+                .findByOwnerFirebaseUidAndActiveTrueOrderBySortOrderAsc(firebaseUid)
+                .stream()
+                .map(SentenceTemplateResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<TrainingAttemptResponse> findLatestBySentenceForClient(UUID clientId) {
         return trainingAttemptRepository.findLatestBySentenceIdForClient(clientId)
                 .stream()

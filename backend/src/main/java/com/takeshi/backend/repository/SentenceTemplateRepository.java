@@ -9,4 +9,6 @@ import com.takeshi.backend.entity.SentenceTemplate;
 
 public interface SentenceTemplateRepository extends JpaRepository<SentenceTemplate, UUID> {
     List<SentenceTemplate> findByCategoryIdAndActiveTrueOrderBySortOrderAsc(UUID categoryId);
+
+    List<SentenceTemplate> findByOwnerFirebaseUidAndActiveTrueOrderBySortOrderAsc(String ownerFirebaseUid);
 }

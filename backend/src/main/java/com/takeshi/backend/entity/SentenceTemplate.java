@@ -1,11 +1,16 @@
 package com.takeshi.backend.entity;
 
-import jakarta.persistence.*;
+import java.time.OffsetDateTime;
+import java.util.UUID;
+
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.time.OffsetDateTime;
-import java.util.UUID;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "sentence_templates")
@@ -19,6 +24,9 @@ public class SentenceTemplate {
 
     @Column(name = "category_id", nullable = false)
     private UUID categoryId;
+
+    @Column(name = "owner_firebase_uid")
+    private String ownerFirebaseUid;
 
     @Column(name = "template_key", unique = true)
     private String templateKey;
@@ -57,6 +65,10 @@ public class SentenceTemplate {
 
     public UUID getCategoryId() {
         return categoryId;
+    }
+
+    public String getOwnerFirebaseUid() {
+        return ownerFirebaseUid;
     }
 
     public String getTemplateKey() {
