@@ -14,6 +14,7 @@ create table public.sentence_categories (
 create table public.sentence_templates (
   id uuid not null default gen_random_uuid(),
   category_id uuid not null,
+  owner_firebase_uid text,
   template_key text null,
   title text not null,
   display_text text not null,
@@ -52,6 +53,26 @@ create table public.sentence_template_audios (
   constraint sentence_template_audios_unique
     unique (sentence_template_id, voice_role)
 );
+
+create table public.template_favorites (
+  user_id text not null,
+  sentence_template_id uuid not null,
+  created_at timestamp with time zone not null default now(),
+
+  constraint template_favorites_pkey
+    primary key (user_id, sentence_template_id),
+
+  constraint template_favorites_sentence_template_id_fkey
+    foreign key (sentence_template_id)
+    references public.sentence_templates(id)
+    on delete cascade
+);
+
+create index idx_template_favorites_user_id
+on public.template_favorites(user_id);
+
+create index idx_template_favorites_sentence_template_id
+on public.template_favorites(sentence_template_id);
 
 create table public.training_attempts (
   id uuid not null default gen_random_uuid(),
