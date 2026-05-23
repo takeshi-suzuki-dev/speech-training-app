@@ -15,7 +15,15 @@ import {
   SentenceTemplate,
 } from "@/lib/api/sentenceTemplates";
 import { generateTemplateSampleAudio } from "@/lib/api/tts";
+import {
+  addTemplateFavorite,
+  fetchFavoriteTemplateIds,
+  removeTemplateFavorite,
+} from "@/lib/api/templateFavorites";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
+
+const MIC_AUTO_RELEASE_MS = 90_000;
+const RECORDING_MAX_MS = 35_000;
 
 // ── Static data ──────────────────────────────────────────────
 const getCategoryIcon = (categoryKey: string | null) => {
@@ -67,8 +75,6 @@ function isEffectivelyNoSpeech(result: SpeechEvaluateResponse): boolean {
     allOmitted
   );
 }
-
-const MIC_AUTO_RELEASE_MS = 90_000;
 
 const buildTemplateLatestScores = (
   attempts: TrainingAttemptResult[],
@@ -159,15 +165,7 @@ export default function PronunciationPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [expandedWord, setExpandedWord] = useState<number | null>(null);
   const [scored, setScored] = useState(false);
-  const [favorites, setFavorites] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    try {
-      const stored = localStorage.getItem("speakup_favorites");
-      return stored ? new Set<string>(JSON.parse(stored)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   // ── Audio player state (TTS / Roger) ─────────────────────
   const [isPlaying, setIsPlaying] = useState(false);
@@ -194,11 +192,21 @@ export default function PronunciationPage() {
   const recordingStreamRef = useRef<MediaStream | null>(null);
   const recordedChunksRef = useRef<Float32Array[]>([]);
   const releaseTimerRef = useRef<number | null>(null);
+  const recordingLimitTimerRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const myVoiceRef = useRef<HTMLAudioElement>(null);
 
   // ── Mic helpers ───────────────────────────────────────────
+  const clearRecordingLimitTimer = () => {
+    if (recordingLimitTimerRef.current) {
+      window.clearTimeout(recordingLimitTimerRef.current);
+      recordingLimitTimerRef.current = null;
+    }
+  };
+
   const releaseMicrophone = () => {
+    clearRecordingLimitTimer();
+
     if (releaseTimerRef.current) {
       window.clearTimeout(releaseTimerRef.current);
       releaseTimerRef.current = null;
@@ -223,6 +231,8 @@ export default function PronunciationPage() {
 
   useEffect(() => {
     return () => {
+      clearRecordingLimitTimer();
+
       if (releaseTimerRef.current) window.clearTimeout(releaseTimerRef.current);
       processorRef.current?.disconnect();
       sourceRef.current?.disconnect();
@@ -266,6 +276,30 @@ export default function PronunciationPage() {
     };
 
     void loadCategories();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadFavorites = async () => {
+      try {
+        const favoriteIds = await fetchFavoriteTemplateIds();
+
+        if (ignore) {
+          return;
+        }
+
+        setFavorites(new Set(favoriteIds));
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    void loadFavorites();
 
     return () => {
       ignore = true;
@@ -399,6 +433,12 @@ export default function PronunciationPage() {
       });
       setIsMicReady(true);
       setIsRecording(true);
+
+      clearRecordingLimitTimer();
+      recordingLimitTimerRef.current = window.setTimeout(() => {
+        recordingLimitTimerRef.current = null;
+        handleStopRecording();
+      }, RECORDING_MAX_MS);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -471,7 +511,14 @@ export default function PronunciationPage() {
   };
 
   const handleStopRecording = () => {
-    if (!audioContextRef.current) return;
+    clearRecordingLimitTimer();
+
+    if (!audioContextRef.current || recordedChunksRef.current.length === 0) {
+      setIsRecording(false);
+      scheduleMicRelease();
+      return;
+    }
+
     const sr = audioContextRef.current.sampleRate;
     const merged = mergeAudioChunks(recordedChunksRef.current);
     const resampled = resampleAudio(merged, sr, TARGET_SAMPLE_RATE);
@@ -606,16 +653,46 @@ export default function PronunciationPage() {
     setSheetOpen(false);
   };
 
-  const toggleFavorite = (templateId: string, e: React.MouseEvent) => {
+  const toggleFavorite = async (templateId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+
+    const wasFavorite = favorites.has(templateId);
+
     setFavorites((prev) => {
       const next = new Set(prev);
-      next.has(templateId) ? next.delete(templateId) : next.add(templateId);
-      try {
-        localStorage.setItem("speakup_favorites", JSON.stringify([...next]));
-      } catch {}
+
+      if (wasFavorite) {
+        next.delete(templateId);
+      } else {
+        next.add(templateId);
+      }
+
       return next;
     });
+
+    try {
+      if (wasFavorite) {
+        await removeTemplateFavorite(templateId);
+      } else {
+        await addTemplateFavorite(templateId);
+      }
+    } catch (error) {
+      setFavorites((prev) => {
+        const next = new Set(prev);
+
+        if (wasFavorite) {
+          next.add(templateId);
+        } else {
+          next.delete(templateId);
+        }
+
+        return next;
+      });
+
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to update favorite.",
+      );
+    }
   };
 
   // ── Derived ───────────────────────────────────────────────
@@ -1011,6 +1088,12 @@ export default function PronunciationPage() {
                   Recording…
                 </span>
               )}
+            </div>
+
+            <div className="mb-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2">
+              <p className="mt-0.5 text-[10px] text-amber-600">
+                Recording auto-stops at 35 sec.
+              </p>
             </div>
 
             {/* Hidden audio element for recorded voice playback */}
