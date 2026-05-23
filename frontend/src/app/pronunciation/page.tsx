@@ -6,7 +6,7 @@ import {
   fetchLatestAssessmentResultsBySentence,
   TrainingAttemptResult,
 } from "@/lib/api/assessmentResults";
-import AppNav from "@/app/components/AppNav";
+import AppNav from "@/components/AppNav";
 import { scorePronunciation } from "@/lib/api/pronunciationAssessment";
 import {
   fetchSentenceCategories,
@@ -159,6 +159,16 @@ export default function PronunciationPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [expandedWord, setExpandedWord] = useState<number | null>(null);
   const [scored, setScored] = useState(false);
+  const [favorites, setFavorites] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const stored = localStorage.getItem("speakup_favorites");
+      return stored ? new Set<string>(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   // ── Audio player state (TTS / Roger) ─────────────────────
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -596,12 +606,27 @@ export default function PronunciationPage() {
     setSheetOpen(false);
   };
 
+  const toggleFavorite = (templateId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      next.has(templateId) ? next.delete(templateId) : next.add(templateId);
+      try {
+        localStorage.setItem("speakup_favorites", JSON.stringify([...next]));
+      } catch {}
+      return next;
+    });
+  };
+
   // ── Derived ───────────────────────────────────────────────
   const words = result?.words ?? [];
   const sentenceScores = result?.sentenceScores;
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
   const selectedTemplate =
     templates.find((template) => template.id === selectedTemplateId) ?? null;
+  const filteredTemplates = favoritesOnly
+    ? templates.filter((t) => favorites.has(t.id))
+    : templates;
 
   // ── Time formatter ────────────────────────────────────────
   const formatTime = (sec: number) => {
@@ -671,7 +696,7 @@ export default function PronunciationPage() {
             {sidebarView === "phrases" && (
               <div className="p-5">
                 {/* Header */}
-                <div className="flex items-center gap-2 mb-4">
+                <div className="flex items-center gap-2 mb-3">
                   <button
                     onClick={() => setSidebarView("categories")}
                     className="w-7 h-7 rounded-full bg-gray-100 hover:bg-purple-50 flex items-center justify-center text-gray-400 hover:text-purple-400 transition text-xs shrink-0"
@@ -687,23 +712,36 @@ export default function PronunciationPage() {
                     {selectedCategory?.displayName ?? "Templates"}
                   </span>
                   <span className="text-[11px] text-gray-400 shrink-0">
-                    {templates.length}
+                    {filteredTemplates.length}
                   </span>
                 </div>
+
+                {/* Fav filter toggle */}
+                <button
+                  onClick={() => setFavoritesOnly((v) => !v)}
+                  className={`mb-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${
+                    favoritesOnly
+                      ? "bg-amber-50 border-amber-300 text-amber-600"
+                      : "bg-gray-50 border-gray-200 text-gray-400 hover:border-purple-200 hover:text-purple-400"
+                  }`}
+                >
+                  {favoritesOnly ? "★" : "☆"} Favorites only
+                </button>
 
                 {/* Phrase list */}
                 {templateLoading ? (
                   <p className="py-6 text-center text-xs text-gray-400">
                     Loading…
                   </p>
-                ) : templates.length === 0 ? (
+                ) : filteredTemplates.length === 0 ? (
                   <p className="py-6 text-center text-xs text-gray-400">
-                    No templates yet.
+                    {favoritesOnly ? "No favorites yet." : "No templates yet."}
                   </p>
                 ) : (
                   <div className="flex flex-col gap-2">
-                    {templates.map((template) => {
+                    {filteredTemplates.map((template) => {
                       const isSelected = selectedTemplateId === template.id;
+                      const isFav = favorites.has(template.id);
                       const diff = template.difficulty?.toLowerCase() ?? "";
                       const diffBadge =
                         diff === "easy"
@@ -736,7 +774,7 @@ export default function PronunciationPage() {
                               : "border-gray-100 bg-gray-50 hover:bg-purple-50 hover:border-purple-200"
                           }`}
                         >
-                          {/* Badge + title row */}
+                          {/* Badge + title + star row */}
                           <div className="flex items-center gap-2 mb-1.5">
                             <span
                               className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${diffBadge}`}
@@ -744,22 +782,26 @@ export default function PronunciationPage() {
                               {diffLabel}
                             </span>
                             {template.title && (
-                              <span className="text-[10px] font-bold text-purple-400 truncate">
+                              <span className="text-[10px] font-bold text-purple-400 truncate flex-1">
                                 {template.title}
                               </span>
                             )}
-                            {isSelected && (
-                              <span className="ml-auto text-purple-400 text-xs shrink-0">
-                                ✓
-                              </span>
+                            {isSelected && !template.title && (
+                              <span className="flex-1" />
                             )}
+                            <span
+                              onClick={(e) => toggleFavorite(template.id, e)}
+                              className={`text-sm shrink-0 transition hover:scale-125 ${isFav ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
+                            >
+                              {isFav ? "★" : "☆"}
+                            </span>
                           </div>
                           {/* Phrase text */}
                           <p className="text-[13px] font-semibold text-gray-700 leading-snug">
                             {template.displayText}
                           </p>
                           {/* Score row */}
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 mt-1.5">
                             <span
                               className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
                             />
@@ -769,13 +811,7 @@ export default function PronunciationPage() {
                               </span>
                             ) : (
                               <span
-                                className={`text-[11px] font-bold ${
-                                  lastScore >= 80
-                                    ? "text-emerald-600"
-                                    : lastScore >= 60
-                                      ? "text-amber-500"
-                                      : "text-red-500"
-                                }`}
+                                className={`text-[11px] font-bold ${lastScore >= 80 ? "text-emerald-600" : lastScore >= 60 ? "text-amber-500" : "text-red-500"}`}
                               >
                                 Last: {lastScore}
                               </span>
@@ -917,7 +953,12 @@ export default function PronunciationPage() {
                       onChange={(e) => {
                         const t = Number(e.target.value);
                         setCurrentTime(t);
-                        if (audioRef.current) audioRef.current.currentTime = t;
+
+                        const audio = audioRef.current;
+                        if (!audio) return;
+
+                        audio.currentTime = t;
+                        void audio.play();
                       }}
                       className="w-24 h-1 accent-violet-400 cursor-pointer"
                     />
@@ -1091,8 +1132,12 @@ export default function PronunciationPage() {
                       onChange={(e) => {
                         const t = Number(e.target.value);
                         setMyVoiceCurrentTime(t);
-                        if (myVoiceRef.current)
-                          myVoiceRef.current.currentTime = t;
+
+                        const audio = myVoiceRef.current;
+                        if (!audio) return;
+
+                        audio.currentTime = t;
+                        void audio.play();
                       }}
                       className="w-20 h-1 accent-pink-400 cursor-pointer"
                     />
@@ -1305,24 +1350,41 @@ export default function PronunciationPage() {
                     ? `${getCategoryIcon(selectedCategory.categoryKey)} ${selectedCategory.displayName}`
                     : "Select a phrase"}
                 </p>
-                <p className="text-[11px] text-gray-400">No phrases yet</p>
+                <p className="text-[11px] text-gray-400">
+                  {filteredTemplates.length} phrase
+                  {filteredTemplates.length !== 1 ? "s" : ""}
+                </p>
               </div>
-              <button
-                onClick={() => setSheetOpen(false)}
-                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 text-sm"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setFavoritesOnly((v) => !v)}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${
+                    favoritesOnly
+                      ? "bg-amber-50 border-amber-300 text-amber-600"
+                      : "bg-gray-50 border-gray-200 text-gray-400"
+                  }`}
+                >
+                  {favoritesOnly ? "★" : "☆"} Fav
+                </button>
+                <button
+                  onClick={() => setSheetOpen(false)}
+                  className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 text-sm"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
             <div className="px-5 py-4 flex flex-col gap-3 pb-8">
-              {/* Demo phrases always available */}
               {templateLoading ? (
                 <p className="text-sm text-gray-400">Loading templates...</p>
-              ) : templates.length === 0 ? (
-                <p className="text-sm text-gray-400">No templates yet.</p>
+              ) : filteredTemplates.length === 0 ? (
+                <p className="text-sm text-gray-400">
+                  {favoritesOnly ? "No favorites yet." : "No templates yet."}
+                </p>
               ) : (
-                templates.map((template) => {
+                filteredTemplates.map((template) => {
                   const isSelected = selectedTemplateId === template.id;
+                  const isFav = favorites.has(template.id);
                   const diff = template.difficulty?.toLowerCase() ?? "";
                   const diffBadge =
                     diff === "easy"
@@ -1355,7 +1417,7 @@ export default function PronunciationPage() {
                           : "border-gray-100 bg-gray-50 hover:border-purple-200 hover:bg-purple-50"
                       }`}
                     >
-                      {/* Badge + title row */}
+                      {/* Badge + title + star row */}
                       <div className="mb-1.5 flex items-center gap-2">
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${diffBadge}`}
@@ -1363,15 +1425,17 @@ export default function PronunciationPage() {
                           {diffLabel}
                         </span>
                         {template.title && (
-                          <span className="text-[10px] font-bold text-purple-400 truncate">
+                          <span className="text-[10px] font-bold text-purple-400 truncate flex-1">
                             {template.title}
                           </span>
                         )}
-                        {isSelected && (
-                          <span className="ml-auto text-purple-400 text-xs shrink-0">
-                            ✓
-                          </span>
-                        )}
+                        {!template.title && <span className="flex-1" />}
+                        <span
+                          onClick={(e) => toggleFavorite(template.id, e)}
+                          className={`text-sm shrink-0 transition hover:scale-125 ${isFav ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
+                        >
+                          {isFav ? "★" : "☆"}
+                        </span>
                       </div>
                       {/* Phrase text */}
                       <p className="text-sm font-semibold text-gray-700 leading-snug mb-2">
@@ -1388,13 +1452,7 @@ export default function PronunciationPage() {
                           </span>
                         ) : (
                           <span
-                            className={`text-[11px] font-bold ${
-                              lastScore >= 80
-                                ? "text-emerald-600"
-                                : lastScore >= 60
-                                  ? "text-amber-500"
-                                  : "text-red-500"
-                            }`}
+                            className={`text-[11px] font-bold ${lastScore >= 80 ? "text-emerald-600" : lastScore >= 60 ? "text-amber-500" : "text-red-500"}`}
                           >
                             Last: {lastScore}
                           </span>
