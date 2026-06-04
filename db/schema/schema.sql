@@ -3,6 +3,7 @@ create table public.sentence_categories (
   category_key text null,
   display_name text not null,
   description text null,
+  owner_firebase_uid text null,
   sort_order integer not null default 0,
   is_active boolean not null default true,
   created_at timestamp with time zone not null default now(),
