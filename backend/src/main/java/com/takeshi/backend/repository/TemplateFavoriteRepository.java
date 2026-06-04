@@ -15,4 +15,6 @@ public interface TemplateFavoriteRepository extends JpaRepository<TemplateFavori
     boolean existsByUserIdAndSentenceTemplateId(String userId, UUID sentenceTemplateId);
 
     void deleteByUserIdAndSentenceTemplateId(String userId, UUID sentenceTemplateId);
+
+    void deleteBySentenceTemplateIdIn(List<UUID> sentenceTemplateIds);
 }

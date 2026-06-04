@@ -59,6 +59,27 @@ public class SentenceTemplate {
     protected SentenceTemplate() {
     }
 
+    public SentenceTemplate(
+            UUID categoryId,
+            String ownerFirebaseUid,
+            String title,
+            String displayText,
+            String scoringText,
+            String sampleAudioText,
+            String difficulty,
+            Integer sortOrder) {
+        this.categoryId = categoryId;
+        this.ownerFirebaseUid = ownerFirebaseUid;
+        this.templateKey = null;
+        this.title = title;
+        this.displayText = displayText;
+        this.scoringText = scoringText;
+        this.sampleAudioText = sampleAudioText;
+        this.difficulty = difficulty;
+        this.sortOrder = sortOrder;
+        this.active = true;
+    }
+
     public UUID getId() {
         return id;
     }
@@ -105,5 +126,24 @@ public class SentenceTemplate {
 
     public OffsetDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public void deactivate() {
+        this.active = false;
+    }
+
+    public void update(
+            UUID categoryId,
+            String title,
+            String displayText,
+            String scoringText,
+            String sampleAudioText,
+            String difficulty) {
+        this.categoryId = categoryId;
+        this.title = title;
+        this.displayText = displayText;
+        this.scoringText = scoringText;
+        this.sampleAudioText = sampleAudioText;
+        this.difficulty = difficulty;
     }
 }

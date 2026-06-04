@@ -9,13 +9,15 @@ public record SentenceCategoryResponse(
         String categoryKey,
         String displayName,
         String description,
-        Integer sortOrder) {
+        Integer sortOrder,
+        boolean userCategory) {
     public static SentenceCategoryResponse from(SentenceCategory category) {
         return new SentenceCategoryResponse(
                 category.getId(),
                 category.getCategoryKey(),
                 category.getDisplayName(),
                 category.getDescription(),
-                category.getSortOrder());
+                category.getSortOrder(),
+                category.getOwnerFirebaseUid() != null);
     }
 }

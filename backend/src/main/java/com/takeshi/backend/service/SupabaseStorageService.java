@@ -24,11 +24,7 @@ public class SupabaseStorageService {
     private final RestTemplate restTemplate = new RestTemplate();
 
     public String uploadMp3(String objectPath, byte[] mp3Bytes) {
-        String url = supabaseUrl
-                + "/storage/v1/object/"
-                + bucketName
-                + "/"
-                + objectPath;
+        String url = buildObjectUrl(objectPath);
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("apikey", serviceRoleKey);
@@ -46,6 +42,34 @@ public class SupabaseStorageService {
                 String.class);
 
         return objectPath;
+    }
+
+    public void deleteMp3(String objectPath) {
+        if (objectPath == null || objectPath.isBlank()) {
+            return;
+        }
+
+        String url = buildObjectUrl(objectPath);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("apikey", serviceRoleKey);
+        headers.setBearerAuth(serviceRoleKey);
+
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+
+        restTemplate.exchange(
+                url,
+                HttpMethod.DELETE,
+                request,
+                String.class);
+    }
+
+    private String buildObjectUrl(String objectPath) {
+        return supabaseUrl
+                + "/storage/v1/object/"
+                + bucketName
+                + "/"
+                + objectPath;
     }
 
     public String buildPublicUrl(String objectPath) {

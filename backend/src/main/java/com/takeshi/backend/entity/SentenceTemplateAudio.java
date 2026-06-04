@@ -1,11 +1,16 @@
 package com.takeshi.backend.entity;
 
-import jakarta.persistence.*;
+import java.time.OffsetDateTime;
+import java.util.UUID;
+
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.time.OffsetDateTime;
-import java.util.UUID;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "sentence_template_audios")
@@ -37,6 +42,18 @@ public class SentenceTemplateAudio {
     private OffsetDateTime createdAt;
 
     protected SentenceTemplateAudio() {
+    }
+
+    public SentenceTemplateAudio(
+            UUID sentenceTemplateId,
+            String voiceRole,
+            String voiceId,
+            String modelId) {
+        this.sentenceTemplateId = sentenceTemplateId;
+        this.voiceRole = voiceRole;
+        this.voiceId = voiceId;
+        this.modelId = modelId;
+        this.audioPath = null;
     }
 
     public UUID getId() {
