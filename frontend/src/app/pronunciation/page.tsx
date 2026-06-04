@@ -1,18 +1,25 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   fetchLatestAssessmentResultsBySentence,
   TrainingAttemptResult,
 } from "@/lib/api/assessmentResults";
+import { auth } from "@/lib/firebase";
 import AppNav from "@/components/AppNav";
 import { scorePronunciation } from "@/lib/api/pronunciationAssessment";
 import {
+  createSentenceCategory,
+  createSentenceTemplate,
+  deleteSentenceCategory,
+  deleteSentenceTemplate,
   fetchSentenceCategories,
   fetchSentenceTemplates,
   SentenceCategory,
   SentenceTemplate,
+  updateSentenceCategory,
+  updateSentenceTemplate,
 } from "@/lib/api/sentenceTemplates";
 import { generateTemplateSampleAudio } from "@/lib/api/tts";
 import {
@@ -178,11 +185,38 @@ export default function PronunciationPage() {
 
   // ── UI state ──────────────────────────────────────────────
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetView, setSheetView] = useState<
+    "phrases" | "categories" | "category-form" | "phrase-form"
+  >("phrases");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
     null,
   );
-  const [sidebarView, setSidebarView] = useState<"categories" | "phrases">(
-    "categories",
+  const [sidebarView, setSidebarView] = useState<
+    "categories" | "phrases" | "category-form" | "phrase-form"
+  >("categories");
+
+  // ── Category CRUD state ───────────────────────────────────
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(
+    null,
+  );
+  const [categoryFormName, setCategoryFormName] = useState("");
+  const [categoryFormKey, setCategoryFormKey] = useState("");
+  const [categoryFormDesc, setCategoryFormDesc] = useState("");
+
+  // ── Template CRUD state ───────────────────────────────────
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(
+    null,
+  );
+  const [templateFormCategoryId, setTemplateFormCategoryId] = useState<
+    string | null
+  >(null);
+  const [templateFormTitle, setTemplateFormTitle] = useState("");
+  const [templateFormText, setTemplateFormText] = useState("");
+  const [templateFormDifficulty, setTemplateFormDifficulty] = useState<
+    "easy" | "medium" | "hard" | ""
+  >("");
+  const [templateMovedToast, setTemplateMovedToast] = useState<string | null>(
+    null,
   );
 
   // ── Refs ──────────────────────────────────────────────────
@@ -285,7 +319,14 @@ export default function PronunciationPage() {
   useEffect(() => {
     let ignore = false;
 
-    const loadFavorites = async () => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        if (!ignore) {
+          setFavorites(new Set());
+        }
+        return;
+      }
+
       try {
         const favoriteIds = await fetchFavoriteTemplateIds();
 
@@ -297,12 +338,11 @@ export default function PronunciationPage() {
       } catch (error) {
         console.error(error);
       }
-    };
-
-    void loadFavorites();
+    });
 
     return () => {
       ignore = true;
+      unsubscribe();
     };
   }, []);
 
@@ -695,6 +735,235 @@ export default function PronunciationPage() {
     }
   };
 
+  // ── Category CRUD helpers ─────────────────────────────────
+  const openNewCategoryForm = (isMobile: boolean) => {
+    setEditingCategoryId(null);
+    setCategoryFormName("");
+    setCategoryFormKey("");
+    setCategoryFormDesc("");
+    if (isMobile) {
+      setSheetView("category-form");
+    } else {
+      setSidebarView("category-form");
+    }
+  };
+
+  const openEditCategoryForm = (cat: SentenceCategory, isMobile: boolean) => {
+    setEditingCategoryId(cat.id);
+    setCategoryFormName(cat.displayName);
+    setCategoryFormKey(cat.categoryKey ?? "");
+    setCategoryFormDesc(cat.description ?? "");
+    if (isMobile) {
+      setSheetView("category-form");
+    } else {
+      setSidebarView("category-form");
+    }
+  };
+
+  const handleSaveCategory = async () => {
+    const name = categoryFormName.trim();
+
+    if (!name) {
+      return;
+    }
+
+    const request = {
+      displayName: name,
+      description: categoryFormDesc.trim() || null,
+    };
+
+    try {
+      setErrorMessage("");
+
+      const savedCategory = editingCategoryId
+        ? await updateSentenceCategory(editingCategoryId, request)
+        : await createSentenceCategory(request);
+
+      const nextCategories = await fetchSentenceCategories();
+      setCategories(nextCategories);
+
+      setSelectedCategoryId(savedCategory.id);
+      setTemplates([]);
+      setSelectedTemplateId(null);
+      setReferenceText("Select a practice sentence to get started.");
+
+      setSidebarView("categories");
+      setSheetView("categories");
+      setEditingCategoryId(null);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to save category.",
+      );
+    }
+  };
+
+  const handleDeleteCategory = async (catId: string) => {
+    const ok = window.confirm(
+      "Delete this category?\n\nAll practice sentences in this category will also be deleted.\nThis action cannot be undone.",
+    );
+
+    if (!ok) {
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+
+      await deleteSentenceCategory(catId);
+
+      const nextCategories = await fetchSentenceCategories();
+      setCategories(nextCategories);
+
+      if (selectedCategoryId === catId) {
+        const nextCategoryId = nextCategories[0]?.id ?? null;
+        setSelectedCategoryId(nextCategoryId);
+
+        if (!nextCategoryId) {
+          setTemplates([]);
+          setSelectedTemplateId(null);
+          setReferenceText("");
+        }
+      }
+
+      setSidebarView("categories");
+      setSheetView("categories");
+      setEditingCategoryId(null);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to delete category.",
+      );
+    }
+  };
+
+  // ── Template CRUD helpers ─────────────────────────────────
+  const openNewTemplateForm = (isMobile: boolean) => {
+    setEditingTemplateId(null);
+    setTemplateFormCategoryId(selectedCategoryId);
+    setTemplateFormTitle("");
+    setTemplateFormText("");
+    setTemplateFormDifficulty("");
+    if (isMobile) {
+      setSheetView("phrase-form");
+    } else {
+      setSidebarView("phrase-form");
+    }
+  };
+
+  const openEditTemplateForm = (
+    template: SentenceTemplate,
+    isMobile: boolean,
+  ) => {
+    setEditingTemplateId(template.id);
+    setTemplateFormCategoryId(template.categoryId);
+    setTemplateFormTitle(template.title ?? "");
+    setTemplateFormText(template.displayText);
+    setTemplateFormDifficulty(
+      (template.difficulty?.toLowerCase() as "easy" | "medium" | "hard") ?? "",
+    );
+    if (isMobile) {
+      setSheetView("phrase-form");
+    } else {
+      setSidebarView("phrase-form");
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    const text = templateFormText.trim();
+
+    if (!text) {
+      return;
+    }
+
+    const destCategoryId = templateFormCategoryId ?? selectedCategoryId;
+
+    if (!destCategoryId) {
+      setErrorMessage("Please select a category.");
+      return;
+    }
+
+    const title = templateFormTitle.trim();
+    const difficulty = templateFormDifficulty || "easy";
+
+    const request = {
+      categoryId: destCategoryId,
+      title,
+      displayText: text,
+      scoringText: text,
+      sampleAudioText: text,
+      difficulty,
+    };
+
+    try {
+      setErrorMessage("");
+
+      if (editingTemplateId) {
+        await updateSentenceTemplate(editingTemplateId, request);
+      } else {
+        await createSentenceTemplate(request);
+      }
+
+      if (selectedCategoryId !== destCategoryId) {
+        setSelectedCategoryId(destCategoryId);
+      } else {
+        const nextTemplates = await fetchSentenceTemplates(destCategoryId);
+        setTemplates(nextTemplates);
+
+        if (!editingTemplateId && nextTemplates.length > 0) {
+          const createdTemplate = nextTemplates[nextTemplates.length - 1];
+          setSelectedTemplateId(createdTemplate.id);
+          setReferenceText(createdTemplate.displayText);
+        }
+      }
+
+      setSidebarView("phrases");
+      setSheetView("phrases");
+      setEditingTemplateId(null);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to save practice sentence.",
+      );
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    const ok = window.confirm(
+      "Delete this practice sentence?\n\nThe sample audio file for this sentence will also be deleted.\nYour past practice history will remain.",
+    );
+
+    if (!ok) {
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+
+      await deleteSentenceTemplate(templateId);
+
+      if (selectedCategoryId) {
+        const nextTemplates = await fetchSentenceTemplates(selectedCategoryId);
+        setTemplates(nextTemplates);
+
+        if (selectedTemplateId === templateId) {
+          const nextTemplate = nextTemplates[0] ?? null;
+          setSelectedTemplateId(nextTemplate?.id ?? null);
+          setReferenceText(nextTemplate?.displayText ?? "");
+        }
+      }
+
+      setSidebarView("phrases");
+      setSheetView("phrases");
+      setEditingTemplateId(null);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to delete practice sentence.",
+      );
+    }
+  };
+
   // ── Derived ───────────────────────────────────────────────
   const words = result?.words ?? [];
   const sentenceScores = result?.sentenceScores;
@@ -729,7 +998,16 @@ export default function PronunciationPage() {
             {/* ── Category view ── */}
             {sidebarView === "categories" && (
               <div className="p-5">
-                <SectionLabel>Category</SectionLabel>
+                <div className="flex items-center justify-between mb-3">
+                  <SectionLabel>Category</SectionLabel>
+                  <button
+                    type="button"
+                    onClick={() => openNewCategoryForm(false)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-purple-500 bg-purple-50 hover:bg-purple-100 transition"
+                  >
+                    + New
+                  </button>
+                </div>
                 {categoryLoading ? (
                   <p className="text-xs text-gray-400 py-4 text-center">
                     Loading…
@@ -737,32 +1015,44 @@ export default function PronunciationPage() {
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     {categories.map((cat) => (
-                      <button
+                      <div
                         key={cat.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedCategoryId(cat.id);
-                          setSidebarView("phrases");
-                        }}
-                        className="group flex w-full items-center gap-3 rounded-xl border-2 border-transparent px-3 py-2.5 text-left transition hover:border-purple-100 hover:bg-purple-50"
+                        className="group flex w-full items-center gap-3 rounded-xl border-2 border-transparent px-3 py-2.5 transition hover:border-purple-100 hover:bg-purple-50"
                       >
-                        <span className="text-xl w-7 text-center shrink-0">
-                          {getCategoryIcon(cat.categoryKey)}
-                        </span>
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-sm font-bold text-gray-700 truncate">
-                            {cat.displayName}
+                        <button
+                          type="button"
+                          className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                          onClick={() => {
+                            setSelectedCategoryId(cat.id);
+                            setSidebarView("phrases");
+                          }}
+                        >
+                          <span className="text-xl w-7 text-center shrink-0">
+                            {getCategoryIcon(cat.categoryKey)}
                           </span>
-                          {cat.description && (
-                            <span className="block text-[11px] text-gray-400 truncate">
-                              {cat.description}
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-bold text-gray-700 truncate">
+                              {cat.displayName}
                             </span>
-                          )}
-                        </span>
-                        <span className="text-purple-300 text-base transition group-hover:translate-x-0.5 group-hover:text-purple-400">
+                            {cat.description && (
+                              <span className="block text-[11px] text-gray-400 truncate">
+                                {cat.description}
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Edit ${cat.displayName}`}
+                          onClick={() => openEditCategoryForm(cat, false)}
+                          className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs shrink-0"
+                        >
+                          ✎
+                        </button>
+                        <span className="text-purple-300 text-base transition group-hover:translate-x-0.5 group-hover:text-purple-400 shrink-0">
                           ›
                         </span>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -788,9 +1078,13 @@ export default function PronunciationPage() {
                   <span className="text-sm font-bold text-gray-700 flex-1 truncate">
                     {selectedCategory?.displayName ?? "Templates"}
                   </span>
-                  <span className="text-[11px] text-gray-400 shrink-0">
-                    {filteredTemplates.length}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => openNewTemplateForm(false)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-purple-500 bg-purple-50 hover:bg-purple-100 transition shrink-0"
+                  >
+                    + New
+                  </button>
                 </div>
 
                 {/* Fav filter toggle */}
@@ -823,7 +1117,7 @@ export default function PronunciationPage() {
                       const diffBadge =
                         diff === "easy"
                           ? "bg-emerald-50 text-emerald-700"
-                          : diff === "medium" || diff === "med"
+                          : diff === "medium"
                             ? "bg-amber-50 text-amber-600"
                             : diff === "hard"
                               ? "bg-red-50 text-red-600"
@@ -841,64 +1135,268 @@ export default function PronunciationPage() {
                               : "bg-red-400";
 
                       return (
-                        <button
+                        <div
                           key={template.id}
-                          type="button"
-                          onClick={() => selectTemplate(template)}
-                          className={`w-full text-left px-3 py-3 rounded-xl border-2 transition ${
+                          className={`group relative w-full rounded-xl border-2 transition ${
                             isSelected
                               ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50 shadow-sm"
                               : "border-gray-100 bg-gray-50 hover:bg-purple-50 hover:border-purple-200"
                           }`}
                         >
-                          {/* Badge + title + star row */}
-                          <div className="flex items-center gap-2 mb-1.5">
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${diffBadge}`}
-                            >
-                              {diffLabel}
-                            </span>
-                            {template.title && (
-                              <span className="text-[10px] font-bold text-purple-400 truncate flex-1">
-                                {template.title}
-                              </span>
-                            )}
-                            {isSelected && !template.title && (
-                              <span className="flex-1" />
-                            )}
-                            <span
-                              onClick={(e) => toggleFavorite(template.id, e)}
-                              className={`text-sm shrink-0 transition hover:scale-125 ${isFav ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
-                            >
-                              {isFav ? "★" : "☆"}
-                            </span>
-                          </div>
-                          {/* Phrase text */}
-                          <p className="text-[13px] font-semibold text-gray-700 leading-snug">
-                            {template.displayText}
-                          </p>
-                          {/* Score row */}
-                          <div className="flex items-center gap-1.5 mt-1.5">
-                            <span
-                              className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
-                            />
-                            {lastScore == null ? (
-                              <span className="text-[11px] font-bold text-gray-400">
-                                Not tried yet
-                              </span>
-                            ) : (
+                          <button
+                            type="button"
+                            onClick={() => selectTemplate(template)}
+                            className="w-full text-left px-3 py-3 pr-14"
+                          >
+                            {/* Badge + title row */}
+                            <div className="flex items-center gap-2 mb-1.5">
                               <span
-                                className={`text-[11px] font-bold ${lastScore >= 80 ? "text-emerald-600" : lastScore >= 60 ? "text-amber-500" : "text-red-500"}`}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${diffBadge}`}
                               >
-                                Last: {lastScore}
+                                {diffLabel}
                               </span>
-                            )}
-                          </div>
-                        </button>
+                              {template.title && (
+                                <span className="text-[10px] font-bold text-purple-400 truncate">
+                                  {template.title}
+                                </span>
+                              )}
+                            </div>
+                            {/* Phrase text */}
+                            <p className="text-[13px] font-semibold text-gray-700 leading-snug">
+                              {template.displayText}
+                            </p>
+                            {/* Score row */}
+                            <div className="flex items-center gap-1.5 mt-1.5">
+                              <span
+                                className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
+                              />
+                              {lastScore == null ? (
+                                <span className="text-[11px] font-bold text-gray-400">
+                                  Not tried yet
+                                </span>
+                              ) : (
+                                <span
+                                  className={`text-[11px] font-bold ${lastScore >= 80 ? "text-emerald-600" : lastScore >= 60 ? "text-amber-500" : "text-red-500"}`}
+                                >
+                                  Last: {lastScore}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                          {/* Star - always visible, outside select button */}
+                          <button
+                            type="button"
+                            onClick={(e) => toggleFavorite(template.id, e)}
+                            className={`absolute top-2.5 right-8 text-sm transition hover:scale-125 ${isFav ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
+                          >
+                            {isFav ? "★" : "☆"}
+                          </button>
+                          {/* Edit - visible on hover */}
+                          <button
+                            type="button"
+                            aria-label="Edit phrase"
+                            onClick={() =>
+                              openEditTemplateForm(template, false)
+                            }
+                            className="absolute top-2 right-1 opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs"
+                          >
+                            ✎
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
                 )}
+              </div>
+            )}
+            {/* ── Phrase form view ── */}
+            {sidebarView === "phrase-form" && (
+              <div className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <button
+                    onClick={() => setSidebarView("phrases")}
+                    className="w-7 h-7 rounded-full bg-gray-100 hover:bg-purple-50 flex items-center justify-center text-gray-400 hover:text-purple-400 transition text-xs shrink-0"
+                  >
+                    ←
+                  </button>
+                  <span className="text-sm font-bold text-gray-700">
+                    {editingTemplateId ? "Edit phrase" : "New phrase"}
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  {/* Category chips */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wide">
+                      Category
+                    </label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {categories.map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setTemplateFormCategoryId(cat.id)}
+                          className={`rounded-xl border-2 px-3 py-2 text-left text-sm font-bold transition ${
+                            templateFormCategoryId === cat.id
+                              ? "border-purple-300 bg-purple-50 text-purple-700"
+                              : "border-gray-100 bg-gray-50 text-gray-500 hover:border-purple-200"
+                          }`}
+                        >
+                          {getCategoryIcon(cat.categoryKey)} {cat.displayName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Title */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Title
+                    </label>
+                    <input
+                      type="text"
+                      value={templateFormTitle}
+                      onChange={(e) => setTemplateFormTitle(e.target.value)}
+                      placeholder="e.g. Why Australia"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
+                    />
+                  </div>
+
+                  {/* Phrase text */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Phrase text
+                    </label>
+                    <textarea
+                      value={templateFormText}
+                      onChange={(e) => setTemplateFormText(e.target.value)}
+                      placeholder="e.g. I've always wanted to..."
+                      rows={3}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition resize-none"
+                    />
+                  </div>
+
+                  {/* Difficulty chips */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wide">
+                      Difficulty
+                    </label>
+                    <div className="flex gap-2">
+                      {(["easy", "medium", "hard"] as const).map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() =>
+                            setTemplateFormDifficulty(
+                              templateFormDifficulty === d ? "" : d,
+                            )
+                          }
+                          className={`rounded-xl border-2 px-3 py-1.5 text-sm font-bold transition ${
+                            templateFormDifficulty === d
+                              ? d === "easy"
+                                ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                                : d === "medium"
+                                  ? "border-amber-300 bg-amber-50 text-amber-700"
+                                  : "border-red-300 bg-red-50 text-red-700"
+                              : "border-gray-100 bg-gray-50 text-gray-500 hover:border-purple-200"
+                          }`}
+                        >
+                          {d.charAt(0).toUpperCase() + d.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setSidebarView("phrases")}
+                      className="flex-1 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 text-sm font-bold py-2 transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveTemplate}
+                      disabled={!templateFormText.trim()}
+                      className="flex-2 rounded-xl bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-white text-sm font-bold py-2 transition"
+                    >
+                      Save
+                    </button>
+                  </div>
+
+                  {editingTemplateId && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTemplate(editingTemplateId)}
+                      className="w-full rounded-xl border border-red-200 text-red-400 hover:bg-red-50 text-sm font-bold py-2 transition"
+                    >
+                      Delete phrase
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* ── Category form view ── */}
+            {sidebarView === "category-form" && (
+              <div className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <button
+                    onClick={() => setSidebarView("categories")}
+                    className="w-7 h-7 rounded-full bg-gray-100 hover:bg-purple-50 flex items-center justify-center text-gray-400 hover:text-purple-400 transition text-xs shrink-0"
+                  >
+                    ←
+                  </button>
+                  <span className="text-sm font-bold text-gray-700">
+                    {editingCategoryId ? "Edit category" : "New category"}
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Name
+                    </label>
+                    <input
+                      type="text"
+                      value={categoryFormName}
+                      onChange={(e) => setCategoryFormName(e.target.value)}
+                      placeholder="e.g. Business"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Description (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={categoryFormDesc}
+                      onChange={(e) => setCategoryFormDesc(e.target.value)}
+                      placeholder="Short description"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveCategory}
+                    disabled={!categoryFormName.trim()}
+                    className="w-full rounded-xl bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-white text-sm font-bold py-2.5 transition"
+                  >
+                    {editingCategoryId ? "Save changes" : "Create category"}
+                  </button>
+
+                  {editingCategoryId && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCategory(editingCategoryId)}
+                      className="w-full rounded-xl border border-red-200 text-red-400 hover:bg-red-50 text-sm font-bold py-2 transition"
+                    >
+                      Delete category
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -916,6 +1414,7 @@ export default function PronunciationPage() {
                 type="button"
                 onClick={() => {
                   setSelectedCategoryId(cat.id);
+                  setSheetView("phrases");
                   setSheetOpen(true);
                 }}
                 className={`shrink-0 rounded-full border-2 px-4 py-2 text-sm font-bold transition ${
@@ -927,6 +1426,17 @@ export default function PronunciationPage() {
                 {getCategoryIcon(cat.categoryKey)} {cat.displayName}
               </button>
             ))}
+            <button
+              type="button"
+              aria-label="Manage categories"
+              onClick={() => {
+                setSheetView("categories");
+                setSheetOpen(true);
+              }}
+              className="shrink-0 rounded-full border-2 border-gray-100 bg-white text-gray-400 hover:border-purple-200 hover:text-purple-400 w-10 h-10 flex items-center justify-center transition text-base"
+            >
+              ⚙
+            </button>
           </div>
 
           {/* ── Phrase panel ── */}
@@ -1426,127 +1936,407 @@ export default function PronunciationPage() {
         >
           <div className="w-full bg-white rounded-t-3xl max-h-[80vh] overflow-y-auto">
             <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-4" />
-            <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-100">
-              <div>
-                <p className="text-base font-black text-gray-800">
-                  {selectedCategory
-                    ? `${getCategoryIcon(selectedCategory.categoryKey)} ${selectedCategory.displayName}`
-                    : "Select a phrase"}
-                </p>
-                <p className="text-[11px] text-gray-400">
-                  {filteredTemplates.length} phrase
-                  {filteredTemplates.length !== 1 ? "s" : ""}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setFavoritesOnly((v) => !v)}
-                  className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${
-                    favoritesOnly
-                      ? "bg-amber-50 border-amber-300 text-amber-600"
-                      : "bg-gray-50 border-gray-200 text-gray-400"
-                  }`}
-                >
-                  {favoritesOnly ? "★" : "☆"} Fav
-                </button>
-                <button
-                  onClick={() => setSheetOpen(false)}
-                  className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 text-sm"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-            <div className="px-5 py-4 flex flex-col gap-3 pb-8">
-              {templateLoading ? (
-                <p className="text-sm text-gray-400">Loading templates...</p>
-              ) : filteredTemplates.length === 0 ? (
-                <p className="text-sm text-gray-400">
-                  {favoritesOnly ? "No favorites yet." : "No templates yet."}
-                </p>
-              ) : (
-                filteredTemplates.map((template) => {
-                  const isSelected = selectedTemplateId === template.id;
-                  const isFav = favorites.has(template.id);
-                  const diff = template.difficulty?.toLowerCase() ?? "";
-                  const diffBadge =
-                    diff === "easy"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : diff === "medium" || diff === "med"
-                        ? "bg-amber-50 text-amber-600"
-                        : diff === "hard"
-                          ? "bg-red-50 text-red-600"
-                          : "bg-gray-100 text-gray-500";
-                  const diffLabel =
-                    diff.charAt(0).toUpperCase() + diff.slice(1) || "—";
-                  const lastScore = templateLatestScores.get(template.id);
-                  const dotColor =
-                    lastScore == null
-                      ? "bg-gray-200"
-                      : lastScore >= 80
-                        ? "bg-emerald-400"
-                        : lastScore >= 60
-                          ? "bg-amber-400"
-                          : "bg-red-400";
 
-                  return (
+            {/* ── Sheet: phrases view ── */}
+            {sheetView === "phrases" && (
+              <>
+                <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-100">
+                  <div>
+                    <p className="text-base font-black text-gray-800">
+                      {selectedCategory
+                        ? `${getCategoryIcon(selectedCategory.categoryKey)} ${selectedCategory.displayName}`
+                        : "Select a phrase"}
+                    </p>
+                    <p className="text-[11px] text-gray-400">
+                      {filteredTemplates.length} phrase
+                      {filteredTemplates.length !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <button
-                      key={template.id}
                       type="button"
-                      onClick={() => selectTemplate(template)}
-                      className={`w-full rounded-2xl border-2 px-4 py-3.5 text-left transition ${
-                        isSelected
-                          ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50"
-                          : "border-gray-100 bg-gray-50 hover:border-purple-200 hover:bg-purple-50"
+                      onClick={() => openNewTemplateForm(true)}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold border border-purple-200 bg-purple-50 text-purple-500 transition"
+                    >
+                      + New
+                    </button>
+                    <button
+                      onClick={() => setFavoritesOnly((v) => !v)}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${
+                        favoritesOnly
+                          ? "bg-amber-50 border-amber-300 text-amber-600"
+                          : "bg-gray-50 border-gray-200 text-gray-400"
                       }`}
                     >
-                      {/* Badge + title + star row */}
-                      <div className="mb-1.5 flex items-center gap-2">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${diffBadge}`}
-                        >
-                          {diffLabel}
-                        </span>
-                        {template.title && (
-                          <span className="text-[10px] font-bold text-purple-400 truncate flex-1">
-                            {template.title}
-                          </span>
-                        )}
-                        {!template.title && <span className="flex-1" />}
-                        <span
-                          onClick={(e) => toggleFavorite(template.id, e)}
-                          className={`text-sm shrink-0 transition hover:scale-125 ${isFav ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
-                        >
-                          {isFav ? "★" : "☆"}
-                        </span>
-                      </div>
-                      {/* Phrase text */}
-                      <p className="text-sm font-semibold text-gray-700 leading-snug mb-2">
-                        {template.displayText}
-                      </p>
-                      {/* Score row */}
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
-                        />
-                        {lastScore == null ? (
-                          <span className="text-[11px] font-bold text-gray-400">
-                            Not tried yet
-                          </span>
-                        ) : (
-                          <span
-                            className={`text-[11px] font-bold ${lastScore >= 80 ? "text-emerald-600" : lastScore >= 60 ? "text-amber-500" : "text-red-500"}`}
-                          >
-                            Last: {lastScore}
-                          </span>
-                        )}
-                      </div>
+                      {favoritesOnly ? "★" : "☆"} Fav
                     </button>
-                  );
-                })
-              )}
-            </div>
+                    <button
+                      onClick={() => setSheetOpen(false)}
+                      className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 text-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <div className="px-5 py-4 flex flex-col gap-3 pb-8">
+                  {templateLoading ? (
+                    <p className="text-sm text-gray-400">
+                      Loading templates...
+                    </p>
+                  ) : filteredTemplates.length === 0 ? (
+                    <p className="text-sm text-gray-400">
+                      {favoritesOnly
+                        ? "No favorites yet."
+                        : "No templates yet."}
+                    </p>
+                  ) : (
+                    filteredTemplates.map((template) => {
+                      const isSelected = selectedTemplateId === template.id;
+                      const isFav = favorites.has(template.id);
+                      const diff = template.difficulty?.toLowerCase() ?? "";
+                      const diffBadge =
+                        diff === "easy"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : diff === "medium"
+                            ? "bg-amber-50 text-amber-600"
+                            : diff === "hard"
+                              ? "bg-red-50 text-red-600"
+                              : "bg-gray-100 text-gray-500";
+                      const diffLabel =
+                        diff.charAt(0).toUpperCase() + diff.slice(1) || "—";
+                      const lastScore = templateLatestScores.get(template.id);
+                      const dotColor =
+                        lastScore == null
+                          ? "bg-gray-200"
+                          : lastScore >= 80
+                            ? "bg-emerald-400"
+                            : lastScore >= 60
+                              ? "bg-amber-400"
+                              : "bg-red-400";
+
+                      return (
+                        <div
+                          key={template.id}
+                          className={`relative w-full rounded-2xl border-2 transition ${
+                            isSelected
+                              ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50"
+                              : "border-gray-100 bg-gray-50"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => selectTemplate(template)}
+                            className="w-full px-4 py-3.5 text-left pr-20"
+                          >
+                            <div className="mb-1.5 flex items-center gap-2">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${diffBadge}`}
+                              >
+                                {diffLabel}
+                              </span>
+                              {template.title && (
+                                <span className="text-[10px] font-bold text-purple-400 truncate">
+                                  {template.title}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm font-semibold text-gray-700 leading-snug mb-2">
+                              {template.displayText}
+                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
+                              />
+                              {lastScore == null ? (
+                                <span className="text-[11px] font-bold text-gray-400">
+                                  Not tried yet
+                                </span>
+                              ) : (
+                                <span
+                                  className={`text-[11px] font-bold ${lastScore >= 80 ? "text-emerald-600" : lastScore >= 60 ? "text-amber-500" : "text-red-500"}`}
+                                >
+                                  Last: {lastScore}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                          {/* Star - always visible, outside select button */}
+                          <button
+                            type="button"
+                            onClick={(e) => toggleFavorite(template.id, e)}
+                            className={`absolute top-3 right-10 text-sm transition hover:scale-125 ${isFav ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
+                          >
+                            {isFav ? "★" : "☆"}
+                          </button>
+                          {/* Edit button */}
+                          <button
+                            type="button"
+                            aria-label="Edit phrase"
+                            onClick={() => openEditTemplateForm(template, true)}
+                            className="absolute top-2.5 right-2.5 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs"
+                          >
+                            ✎
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* ── Sheet: categories view ── */}
+            {sheetView === "categories" && (
+              <>
+                <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-100">
+                  <p className="text-base font-black text-gray-800">
+                    Categories
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openNewCategoryForm(true)}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold border border-purple-200 bg-purple-50 text-purple-500 transition"
+                    >
+                      + New
+                    </button>
+                    <button
+                      onClick={() => setSheetOpen(false)}
+                      className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 text-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <div className="px-5 py-4 flex flex-col gap-2 pb-8">
+                  {categories.map((cat) => (
+                    <div
+                      key={cat.id}
+                      className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3"
+                    >
+                      <button
+                        type="button"
+                        className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                        onClick={() => {
+                          setSelectedCategoryId(cat.id);
+                          setSheetView("phrases");
+                        }}
+                      >
+                        <span className="text-xl w-6 text-center shrink-0">
+                          {getCategoryIcon(cat.categoryKey)}
+                        </span>
+                        <span className="text-sm font-bold text-gray-700 truncate flex-1">
+                          {cat.displayName}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Edit ${cat.displayName}`}
+                        onClick={() => openEditCategoryForm(cat, true)}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs shrink-0"
+                      >
+                        ✎
+                      </button>{" "}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* ── Sheet: phrase-form view ── */}
+            {sheetView === "phrase-form" && (
+              <>
+                <div className="flex items-center gap-3 px-5 pb-3 border-b border-gray-100">
+                  <button
+                    onClick={() => setSheetView("phrases")}
+                    className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs shrink-0"
+                  >
+                    ←
+                  </button>
+                  <p className="text-base font-black text-gray-800">
+                    {editingTemplateId ? "Edit phrase" : "New phrase"}
+                  </p>
+                </div>
+                <div className="px-5 py-4 flex flex-col gap-3 pb-8">
+                  {/* Category chips */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wide">
+                      Category
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {categories.map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setTemplateFormCategoryId(cat.id)}
+                          className={`rounded-xl border-2 px-3 py-2.5 text-left text-sm font-bold transition ${
+                            templateFormCategoryId === cat.id
+                              ? "border-purple-300 bg-purple-50 text-purple-700"
+                              : "border-gray-100 bg-gray-50 text-gray-500"
+                          }`}
+                        >
+                          {getCategoryIcon(cat.categoryKey)} {cat.displayName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Title */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Title
+                    </label>
+                    <input
+                      type="text"
+                      value={templateFormTitle}
+                      onChange={(e) => setTemplateFormTitle(e.target.value)}
+                      placeholder="e.g. Why Australia"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
+                    />
+                  </div>
+
+                  {/* Phrase text */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Phrase text
+                    </label>
+                    <textarea
+                      value={templateFormText}
+                      onChange={(e) => setTemplateFormText(e.target.value)}
+                      placeholder="e.g. I've always wanted to..."
+                      rows={4}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition resize-none"
+                    />
+                  </div>
+
+                  {/* Difficulty */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wide">
+                      Difficulty
+                    </label>
+                    <div className="flex gap-2">
+                      {(["easy", "medium", "hard"] as const).map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() =>
+                            setTemplateFormDifficulty(
+                              templateFormDifficulty === d ? "" : d,
+                            )
+                          }
+                          className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition ${
+                            templateFormDifficulty === d
+                              ? d === "easy"
+                                ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                                : d === "medium"
+                                  ? "border-amber-300 bg-amber-50 text-amber-700"
+                                  : "border-red-300 bg-red-50 text-red-700"
+                              : "border-gray-100 bg-gray-50 text-gray-500"
+                          }`}
+                        >
+                          {d.charAt(0).toUpperCase() + d.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSheetView("phrases")}
+                      className="flex-1 rounded-xl border border-gray-200 text-gray-500 text-sm font-bold py-3 transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveTemplate}
+                      disabled={!templateFormText.trim()}
+                      className="flex-2 rounded-xl bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-white text-sm font-bold py-3 transition"
+                    >
+                      Save
+                    </button>
+                  </div>
+
+                  {editingTemplateId && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTemplate(editingTemplateId)}
+                      className="w-full rounded-xl border border-red-200 text-red-400 text-sm font-bold py-2.5 transition"
+                    >
+                      Delete phrase
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* ── Sheet: category-form view ── */}
+            {sheetView === "category-form" && (
+              <>
+                <div className="flex items-center gap-3 px-5 pb-3 border-b border-gray-100">
+                  <button
+                    onClick={() => setSheetView("categories")}
+                    className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs shrink-0"
+                  >
+                    ←
+                  </button>
+                  <p className="text-base font-black text-gray-800">
+                    {editingCategoryId ? "Edit category" : "New category"}
+                  </p>
+                </div>
+                <div className="px-5 py-4 flex flex-col gap-3 pb-8">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Name
+                    </label>
+                    <input
+                      type="text"
+                      value={categoryFormName}
+                      onChange={(e) => setCategoryFormName(e.target.value)}
+                      placeholder="e.g. Business"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Description (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={categoryFormDesc}
+                      onChange={(e) => setCategoryFormDesc(e.target.value)}
+                      placeholder="Short description"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSaveCategory}
+                    disabled={!categoryFormName.trim()}
+                    className="w-full rounded-xl bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-white text-sm font-bold py-3 transition"
+                  >
+                    {editingCategoryId ? "Save changes" : "Create category"}
+                  </button>
+                  {editingCategoryId && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCategory(editingCategoryId)}
+                      className="w-full rounded-xl border border-red-200 text-red-400 hover:bg-red-50 text-sm font-bold py-2.5 transition"
+                    >
+                      Delete category
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
+        </div>
+      )}
+      {/* ── Toast: template moved ── */}
+      {templateMovedToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl bg-gray-800 text-white text-sm font-semibold shadow-lg whitespace-nowrap">
+          {templateMovedToast}
         </div>
       )}
     </div>
