@@ -37,13 +37,7 @@ export type SaveSentenceTemplateRequest = {
 };
 
 export async function fetchSentenceCategories(): Promise<SentenceCategory[]> {
-  const user = auth.currentUser;
-  const headers: HeadersInit = {};
-
-  if (user) {
-    const idToken = await user.getIdToken();
-    headers.Authorization = `Bearer ${idToken}`;
-  }
+  const headers = await getOptionalAuthHeaders();
 
   const response = await fetch(`${API_BASE_URL}/api/sentence-categories`, {
     headers,
@@ -105,8 +99,13 @@ export async function updateSentenceCategory(
 export async function fetchSentenceTemplates(
   categoryId: string,
 ): Promise<SentenceTemplate[]> {
+  const headers = await getOptionalAuthHeaders();
+
   const response = await fetch(
     `${API_BASE_URL}/api/sentence-templates?categoryId=${categoryId}`,
+    {
+      headers,
+    },
   );
 
   if (!response.ok) {
@@ -210,4 +209,18 @@ export async function deleteSentenceTemplate(
   if (!response.ok) {
     throw new Error("Failed to delete practice sentence.");
   }
+}
+
+async function getOptionalAuthHeaders(): Promise<HeadersInit> {
+  const user = auth.currentUser;
+
+  if (!user) {
+    return {};
+  }
+
+  const idToken = await user.getIdToken();
+
+  return {
+    Authorization: `Bearer ${idToken}`,
+  };
 }

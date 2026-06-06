@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import {
   fetchLatestAssessmentResultsBySentence,
   TrainingAttemptResult,
 } from "@/lib/api/assessmentResults";
-import { auth } from "@/lib/firebase";
 import AppNav from "@/components/AppNav";
 import { scorePronunciation } from "@/lib/api/pronunciationAssessment";
 import {
@@ -111,6 +111,19 @@ const buildTemplateLatestScores = (
   }
 
   return result;
+};
+
+const upsertCategory = (
+  items: SentenceCategory[],
+  category: SentenceCategory,
+): SentenceCategory[] => {
+  const exists = items.some((item) => item.id === category.id);
+
+  const nextItems = exists
+    ? items.map((item) => (item.id === category.id ? category : item))
+    : [...items, category];
+
+  return nextItems.sort((a, b) => a.sortOrder - b.sortOrder);
 };
 
 // ── Score card bg classes ────────────────────────────────────
@@ -229,6 +242,21 @@ export default function PronunciationPage() {
   const recordingLimitTimerRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const myVoiceRef = useRef<HTMLAudioElement>(null);
+  const pendingTemplateSelectRef = useRef<string | null>(null);
+
+  const resetSampleAudioState = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.removeAttribute("src");
+      audioRef.current.load();
+    }
+
+    setAudioUrl(null);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setTtsLoading(false);
+  };
 
   // ── Mic helpers ───────────────────────────────────────────
   const clearRecordingLimitTimer = () => {
@@ -291,9 +319,13 @@ export default function PronunciationPage() {
 
         setCategories(data);
 
-        if (data.length > 0) {
-          setSelectedCategoryId(data[0].id);
-        }
+        setSelectedCategoryId((currentId) => {
+          if (currentId && data.some((category) => category.id === currentId)) {
+            return currentId;
+          }
+
+          return data[0]?.id ?? null;
+        });
       } catch (error) {
         if (!ignore) {
           setErrorMessage(
@@ -309,10 +341,13 @@ export default function PronunciationPage() {
       }
     };
 
-    void loadCategories();
+    const unsubscribe = onAuthStateChanged(auth, () => {
+      void loadCategories();
+    });
 
     return () => {
       ignore = true;
+      unsubscribe();
     };
   }, []);
 
@@ -373,8 +408,11 @@ export default function PronunciationPage() {
   // ── when selected Category ─────────────────────────────────────────────
   useEffect(() => {
     if (!selectedCategoryId) {
+      pendingTemplateSelectRef.current = null;
       setTemplates([]);
       setSelectedTemplateId(null);
+      setReferenceText("Select a practice sentence to get started.");
+      resetSampleAudioState();
       return;
     }
 
@@ -393,13 +431,24 @@ export default function PronunciationPage() {
 
         setTemplates(data);
 
-        if (data.length > 0) {
-          const firstTemplate = data[0];
-          setSelectedTemplateId(firstTemplate.id);
-          setReferenceText(firstTemplate.displayText);
+        const pendingTemplateId = pendingTemplateSelectRef.current;
+        const pendingTemplate = pendingTemplateId
+          ? (data.find((template) => template.id === pendingTemplateId) ?? null)
+          : null;
+
+        pendingTemplateSelectRef.current = null;
+
+        const nextTemplate = pendingTemplate ?? data[0] ?? null;
+
+        if (nextTemplate) {
+          setSelectedTemplateId(nextTemplate.id);
+          setReferenceText(nextTemplate.displayText);
         } else {
           setSelectedTemplateId(null);
+          setReferenceText("Select a practice sentence to get started.");
         }
+
+        resetSampleAudioState();
       } catch (error) {
         if (!ignore) {
           setErrorMessage(
@@ -424,6 +473,11 @@ export default function PronunciationPage() {
 
   // ── Recording ─────────────────────────────────────────────
   const handleStartRecording = async () => {
+    if (!selectedTemplate) {
+      setErrorMessage("Please select a sentence first.");
+      return;
+    }
+
     if (!navigator.mediaDevices?.getUserMedia) {
       setErrorMessage("Microphone recording is not supported in this browser.");
       return;
@@ -581,6 +635,11 @@ export default function PronunciationPage() {
 
   // ── TTS: generate then auto-play ──────────────────────────
   const handlePlaySample = async () => {
+    if (!selectedTemplate) {
+      setErrorMessage("Please select a sentence first.");
+      return;
+    }
+
     // If already generated, toggle play/pause
     if (audioUrl && audioRef.current) {
       if (audioRef.current.paused) {
@@ -590,18 +649,15 @@ export default function PronunciationPage() {
       }
       return;
     }
+
     if (!referenceText.trim()) {
       setErrorMessage("Please enter reference text.");
       return;
     }
+
     try {
       setTtsLoading(true);
       setErrorMessage("");
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      if (!selectedTemplate) {
-        setErrorMessage("Please select a sentence first.");
-        return;
-      }
 
       const response = await generateTemplateSampleAudio(selectedTemplate.id);
 
@@ -675,21 +731,28 @@ export default function PronunciationPage() {
     );
   };
 
-  const selectTemplate = (template: SentenceTemplate) => {
-    setSelectedTemplateId(template.id);
-    setReferenceText(template.displayText);
+  const resetPracticeState = () => {
     setResult(null);
     setAudioFile(null);
+
     setAudioUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return null;
     });
-    setIsPlaying(false);
-    setCurrentTime(0);
+
     setRecordedAudioUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return null;
     });
+
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
+  const selectTemplate = (template: SentenceTemplate) => {
+    setSelectedTemplateId(template.id);
+    setReferenceText(template.displayText);
+    resetSampleAudioState();
     setSheetOpen(false);
   };
 
@@ -775,17 +838,25 @@ export default function PronunciationPage() {
     try {
       setErrorMessage("");
 
+      const isEditing = Boolean(editingCategoryId);
+
       const savedCategory = editingCategoryId
         ? await updateSentenceCategory(editingCategoryId, request)
         : await createSentenceCategory(request);
 
-      const nextCategories = await fetchSentenceCategories();
+      const fetchedCategories = await fetchSentenceCategories();
+      const nextCategories = upsertCategory(fetchedCategories, savedCategory);
+
       setCategories(nextCategories);
 
-      setSelectedCategoryId(savedCategory.id);
-      setTemplates([]);
-      setSelectedTemplateId(null);
-      setReferenceText("Select a practice sentence to get started.");
+      if (isEditing) {
+        setSelectedCategoryId((currentId) => currentId ?? savedCategory.id);
+      } else {
+        setSelectedCategoryId(savedCategory.id);
+        setTemplates([]);
+        setSelectedTemplateId(null);
+        setReferenceText("Select a practice sentence to get started.");
+      }
 
       setSidebarView("categories");
       setSheetView("categories");
@@ -896,22 +967,28 @@ export default function PronunciationPage() {
     try {
       setErrorMessage("");
 
-      if (editingTemplateId) {
-        await updateSentenceTemplate(editingTemplateId, request);
-      } else {
-        await createSentenceTemplate(request);
-      }
+      const savedTemplate = editingTemplateId
+        ? await updateSentenceTemplate(editingTemplateId, request)
+        : await createSentenceTemplate(request);
 
-      if (selectedCategoryId !== destCategoryId) {
+      const movedToAnotherCategory = selectedCategoryId !== destCategoryId;
+
+      if (movedToAnotherCategory) {
+        pendingTemplateSelectRef.current = savedTemplate.id;
         setSelectedCategoryId(destCategoryId);
+        resetSampleAudioState();
       } else {
         const nextTemplates = await fetchSentenceTemplates(destCategoryId);
         setTemplates(nextTemplates);
 
-        if (!editingTemplateId && nextTemplates.length > 0) {
-          const createdTemplate = nextTemplates[nextTemplates.length - 1];
-          setSelectedTemplateId(createdTemplate.id);
-          setReferenceText(createdTemplate.displayText);
+        const nextSavedTemplate =
+          nextTemplates.find((template) => template.id === savedTemplate.id) ??
+          savedTemplate;
+
+        if (!editingTemplateId || selectedTemplateId === editingTemplateId) {
+          setSelectedTemplateId(nextSavedTemplate.id);
+          setReferenceText(nextSavedTemplate.displayText);
+          resetSampleAudioState();
         }
       }
 
@@ -970,6 +1047,7 @@ export default function PronunciationPage() {
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
   const selectedTemplate =
     templates.find((template) => template.id === selectedTemplateId) ?? null;
+  const hasSelectedTemplate = selectedTemplate !== null;
   const filteredTemplates = favoritesOnly
     ? templates.filter((t) => favorites.has(t.id))
     : templates;
@@ -1442,7 +1520,11 @@ export default function PronunciationPage() {
           {/* ── Phrase panel ── */}
           <Card>
             <SectionLabel>Practice Phrase</SectionLabel>
-            <p className="text-xl font-bold text-gray-800 leading-snug mb-4">
+            <p
+              className={`text-xl font-bold leading-snug mb-4 ${
+                hasSelectedTemplate ? "text-gray-800" : "text-gray-400"
+              }`}
+            >
               {referenceText}
             </p>
 
@@ -1467,98 +1549,102 @@ export default function PronunciationPage() {
 
             <div className="flex flex-wrap items-center gap-3">
               {/* Play sample pill — morphs into inline player after generation */}
-              {!audioUrl ? (
-                <button
-                  onClick={handlePlaySample}
-                  disabled={ttsLoading}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold text-purple-700 bg-linear-to-r from-blue-100 to-purple-100 hover:scale-105 transition disabled:opacity-50"
-                >
-                  <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0">
-                    {ttsLoading ? (
-                      <svg
-                        className="animate-spin w-3 h-3 text-purple-400"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
+              {hasSelectedTemplate && (
+                <>
+                  {!audioUrl ? (
+                    <button
+                      onClick={handlePlaySample}
+                      disabled={ttsLoading}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold text-purple-700 bg-linear-to-r from-blue-100 to-purple-100 hover:scale-105 transition disabled:opacity-50"
+                    >
+                      <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0">
+                        {ttsLoading ? (
+                          <svg
+                            className="animate-spin w-3 h-3 text-purple-400"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                          >
+                            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                          </svg>
+                        ) : (
+                          <svg
+                            width="8"
+                            height="9"
+                            viewBox="0 0 8 9"
+                            fill="#a78bfa"
+                          >
+                            <polygon points="0,0 8,4.5 0,9" />
+                          </svg>
+                        )}
+                      </div>
+                      {ttsLoading ? "Generating…" : "Play sample · Roger"}
+                    </button>
+                  ) : (
+                    /* ── Inline mini-player pill ── */
+                    <div className="inline-flex items-center gap-2 pl-2 pr-4 py-2 rounded-full bg-linear-to-r from-blue-100 to-purple-100">
+                      {/* Play / Pause button */}
+                      <button
+                        onClick={handlePlaySample}
+                        className="w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0 hover:scale-110 transition"
                       >
-                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                      </svg>
-                    ) : (
-                      <svg
-                        width="8"
-                        height="9"
-                        viewBox="0 0 8 9"
-                        fill="#a78bfa"
-                      >
-                        <polygon points="0,0 8,4.5 0,9" />
-                      </svg>
-                    )}
-                  </div>
-                  {ttsLoading ? "Generating…" : "Play sample · Roger"}
-                </button>
-              ) : (
-                /* ── Inline mini-player pill ── */
-                <div className="inline-flex items-center gap-2 pl-2 pr-4 py-2 rounded-full bg-linear-to-r from-blue-100 to-purple-100">
-                  {/* Play / Pause button */}
-                  <button
-                    onClick={handlePlaySample}
-                    className="w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0 hover:scale-110 transition"
-                  >
-                    {isPlaying ? (
-                      /* Pause icon */
-                      <svg
-                        width="9"
-                        height="10"
-                        viewBox="0 0 9 10"
-                        fill="#a78bfa"
-                      >
-                        <rect x="0" y="0" width="3" height="10" rx="1" />
-                        <rect x="5.5" y="0" width="3" height="10" rx="1" />
-                      </svg>
-                    ) : (
-                      /* Play icon */
-                      <svg
-                        width="8"
-                        height="9"
-                        viewBox="0 0 8 9"
-                        fill="#a78bfa"
-                      >
-                        <polygon points="0,0 8,4.5 0,9" />
-                      </svg>
-                    )}
-                  </button>
+                        {isPlaying ? (
+                          /* Pause icon */
+                          <svg
+                            width="9"
+                            height="10"
+                            viewBox="0 0 9 10"
+                            fill="#a78bfa"
+                          >
+                            <rect x="0" y="0" width="3" height="10" rx="1" />
+                            <rect x="5.5" y="0" width="3" height="10" rx="1" />
+                          </svg>
+                        ) : (
+                          /* Play icon */
+                          <svg
+                            width="8"
+                            height="9"
+                            viewBox="0 0 8 9"
+                            fill="#a78bfa"
+                          >
+                            <polygon points="0,0 8,4.5 0,9" />
+                          </svg>
+                        )}
+                      </button>
 
-                  {/* Seekbar + time */}
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="range"
-                      min={0}
-                      max={duration || 1}
-                      step={0.01}
-                      value={currentTime}
-                      onChange={(e) => {
-                        const t = Number(e.target.value);
-                        setCurrentTime(t);
+                      {/* Seekbar + time */}
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="range"
+                          min={0}
+                          max={duration || 1}
+                          step={0.01}
+                          value={currentTime}
+                          onChange={(e) => {
+                            const t = Number(e.target.value);
+                            setCurrentTime(t);
 
-                        const audio = audioRef.current;
-                        if (!audio) return;
+                            const audio = audioRef.current;
+                            if (!audio) return;
 
-                        audio.currentTime = t;
-                        void audio.play();
-                      }}
-                      className="w-24 h-1 accent-violet-400 cursor-pointer"
-                    />
-                    <span className="text-[10px] font-mono text-purple-500 w-8 text-right tabular-nums">
-                      {formatTime(currentTime)}
-                    </span>
-                  </div>
+                            audio.currentTime = t;
+                            void audio.play();
+                          }}
+                          className="w-24 h-1 accent-violet-400 cursor-pointer"
+                        />
+                        <span className="text-[10px] font-mono text-purple-500 w-8 text-right tabular-nums">
+                          {formatTime(currentTime)}
+                        </span>
+                      </div>
 
-                  {/* Voice label */}
-                  <span className="text-[11px] font-bold text-purple-400">
-                    Roger
-                  </span>
-                </div>
+                      {/* Voice label */}
+                      <span className="text-[11px] font-bold text-purple-400">
+                        Roger
+                      </span>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Mobile: change phrase */}
@@ -1572,185 +1658,187 @@ export default function PronunciationPage() {
           </Card>
 
           {/* ── Record panel ── */}
-          <Card>
-            {/* Header row: label + mic status */}
-            <div className="flex items-center gap-3 mb-3">
-              <p className="text-[10px] font-bold tracking-widest uppercase text-purple-300">
-                Record
-              </p>
-              {isMicReady && !isRecording && (
-                <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                    Mic ready
+          {hasSelectedTemplate && (
+            <Card>
+              {/* Header row: label + mic status */}
+              <div className="flex items-center gap-3 mb-3">
+                <p className="text-[10px] font-bold tracking-widest uppercase text-purple-300">
+                  Record
+                </p>
+                {isMicReady && !isRecording && (
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                      Mic ready
+                    </span>
+                    <button
+                      onClick={releaseMicrophone}
+                      className="text-[11px] text-gray-400 border border-gray-200 rounded-md px-2 py-0.5 hover:text-gray-600 hover:border-gray-300 transition"
+                    >
+                      Turn off
+                    </button>
+                  </div>
+                )}
+                {isRecording && (
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-red-500 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                    Recording…
                   </span>
-                  <button
-                    onClick={releaseMicrophone}
-                    className="text-[11px] text-gray-400 border border-gray-200 rounded-md px-2 py-0.5 hover:text-gray-600 hover:border-gray-300 transition"
-                  >
-                    Turn off
-                  </button>
-                </div>
-              )}
-              {isRecording && (
-                <span className="flex items-center gap-1.5 text-[11px] font-semibold text-red-500 animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
-                  Recording…
-                </span>
-              )}
-            </div>
+                )}
+              </div>
 
-            <div className="mb-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2">
-              <p className="mt-0.5 text-[10px] text-amber-600">
-                Recording auto-stops at 35 sec.
-              </p>
-            </div>
+              <div className="mb-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2">
+                <p className="mt-0.5 text-[10px] text-amber-600">
+                  Recording auto-stops at 35 sec.
+                </p>
+              </div>
 
-            {/* Hidden audio element for recorded voice playback */}
-            <audio
-              ref={myVoiceRef}
-              src={recordedAudioUrl ?? undefined}
-              className="hidden"
-              onPlay={() => setIsMyVoicePlaying(true)}
-              onPause={() => setIsMyVoicePlaying(false)}
-              onEnded={() => {
-                setIsMyVoicePlaying(false);
-                setMyVoiceCurrentTime(0);
-              }}
-              onTimeUpdate={() =>
-                setMyVoiceCurrentTime(myVoiceRef.current?.currentTime ?? 0)
-              }
-              onLoadedMetadata={() =>
-                setMyVoiceDuration(myVoiceRef.current?.duration ?? 0)
-              }
-            />
-
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Record / Stop toggle */}
-              <button
-                onClick={
-                  isRecording ? handleStopRecording : handleStartRecording
+              {/* Hidden audio element for recorded voice playback */}
+              <audio
+                ref={myVoiceRef}
+                src={recordedAudioUrl ?? undefined}
+                className="hidden"
+                onPlay={() => setIsMyVoicePlaying(true)}
+                onPause={() => setIsMyVoicePlaying(false)}
+                onEnded={() => {
+                  setIsMyVoicePlaying(false);
+                  setMyVoiceCurrentTime(0);
+                }}
+                onTimeUpdate={() =>
+                  setMyVoiceCurrentTime(myVoiceRef.current?.currentTime ?? 0)
                 }
-                disabled={loading}
-                className={`flex items-center gap-2.5 px-5 py-3 rounded-xl text-sm font-bold text-white transition hover:scale-105 disabled:opacity-50 ${
-                  isRecording
-                    ? "bg-linear-to-r from-red-400 to-red-500"
-                    : "bg-linear-to-r from-pink-300 to-violet-400"
-                }`}
-              >
-                {isRecording ? (
-                  <>
-                    <span className="w-3.5 h-3.5 rounded-sm bg-white opacity-90 shrink-0" />
-                    Stop
-                  </>
-                ) : (
-                  <>
-                    <span className="w-3.5 h-3.5 rounded-full bg-white opacity-90 shrink-0 ring-2 ring-white/40" />
-                    Record
-                  </>
-                )}
-              </button>
+                onLoadedMetadata={() =>
+                  setMyVoiceDuration(myVoiceRef.current?.duration ?? 0)
+                }
+              />
 
-              {/* Score button */}
-              <button
-                onClick={handleSubmit}
-                disabled={loading || isRecording || !audioFile || scored}
-                className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold text-white bg-linear-to-r from-violet-400 to-indigo-400 hover:scale-105 transition disabled:opacity-40"
-              >
-                {loading ? (
-                  <svg
-                    className="animate-spin w-3.5 h-3.5"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                  </svg>
-                ) : (
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <polygon points="5 3 19 12 5 21 5 3" />
-                  </svg>
-                )}
-                {loading ? "Scoring…" : "Score"}
-              </button>
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Record / Stop toggle */}
+                <button
+                  onClick={
+                    isRecording ? handleStopRecording : handleStartRecording
+                  }
+                  disabled={loading}
+                  className={`flex items-center gap-2.5 px-5 py-3 rounded-xl text-sm font-bold text-white transition hover:scale-105 disabled:opacity-50 ${
+                    isRecording
+                      ? "bg-linear-to-r from-red-400 to-red-500"
+                      : "bg-linear-to-r from-pink-300 to-violet-400"
+                  }`}
+                >
+                  {isRecording ? (
+                    <>
+                      <span className="w-3.5 h-3.5 rounded-sm bg-white opacity-90 shrink-0" />
+                      Stop
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-3.5 h-3.5 rounded-full bg-white opacity-90 shrink-0 ring-2 ring-white/40" />
+                      Record
+                    </>
+                  )}
+                </button>
 
-              {/* My voice mini-player — appears after recording */}
-              {recordedAudioUrl && (
-                <div className="inline-flex items-center gap-2 pl-2 pr-3 py-2 rounded-full bg-linear-to-r from-pink-100 to-rose-100">
-                  <button
-                    onClick={() => {
-                      if (!myVoiceRef.current) return;
-                      if (myVoiceRef.current.paused) {
-                        void myVoiceRef.current.play();
-                      } else {
-                        myVoiceRef.current.pause();
-                      }
-                    }}
-                    className="w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0 hover:scale-110 transition"
-                  >
-                    {isMyVoicePlaying ? (
-                      <svg
-                        width="9"
-                        height="10"
-                        viewBox="0 0 9 10"
-                        fill="#f472b6"
-                      >
-                        <rect x="0" y="0" width="3" height="10" rx="1" />
-                        <rect x="5.5" y="0" width="3" height="10" rx="1" />
-                      </svg>
-                    ) : (
-                      <svg
-                        width="8"
-                        height="9"
-                        viewBox="0 0 8 9"
-                        fill="#f472b6"
-                      >
-                        <polygon points="0,0 8,4.5 0,9" />
-                      </svg>
-                    )}
-                  </button>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="range"
-                      min={0}
-                      max={myVoiceDuration || 1}
-                      step={0.01}
-                      value={myVoiceCurrentTime}
-                      onChange={(e) => {
-                        const t = Number(e.target.value);
-                        setMyVoiceCurrentTime(t);
+                {/* Score button */}
+                <button
+                  onClick={handleSubmit}
+                  disabled={loading || isRecording || !audioFile || scored}
+                  className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold text-white bg-linear-to-r from-violet-400 to-indigo-400 hover:scale-105 transition disabled:opacity-40"
+                >
+                  {loading ? (
+                    <svg
+                      className="animate-spin w-3.5 h-3.5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
+                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                    </svg>
+                  ) : (
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                  )}
+                  {loading ? "Scoring…" : "Score"}
+                </button>
 
-                        const audio = myVoiceRef.current;
-                        if (!audio) return;
-
-                        audio.currentTime = t;
-                        void audio.play();
+                {/* My voice mini-player — appears after recording */}
+                {recordedAudioUrl && (
+                  <div className="inline-flex items-center gap-2 pl-2 pr-3 py-2 rounded-full bg-linear-to-r from-pink-100 to-rose-100">
+                    <button
+                      onClick={() => {
+                        if (!myVoiceRef.current) return;
+                        if (myVoiceRef.current.paused) {
+                          void myVoiceRef.current.play();
+                        } else {
+                          myVoiceRef.current.pause();
+                        }
                       }}
-                      className="w-20 h-1 accent-pink-400 cursor-pointer"
-                    />
-                    <span className="text-[10px] font-mono text-pink-500 w-8 text-right tabular-nums">
-                      {formatTime(myVoiceCurrentTime)}
+                      className="w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0 hover:scale-110 transition"
+                    >
+                      {isMyVoicePlaying ? (
+                        <svg
+                          width="9"
+                          height="10"
+                          viewBox="0 0 9 10"
+                          fill="#f472b6"
+                        >
+                          <rect x="0" y="0" width="3" height="10" rx="1" />
+                          <rect x="5.5" y="0" width="3" height="10" rx="1" />
+                        </svg>
+                      ) : (
+                        <svg
+                          width="8"
+                          height="9"
+                          viewBox="0 0 8 9"
+                          fill="#f472b6"
+                        >
+                          <polygon points="0,0 8,4.5 0,9" />
+                        </svg>
+                      )}
+                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="range"
+                        min={0}
+                        max={myVoiceDuration || 1}
+                        step={0.01}
+                        value={myVoiceCurrentTime}
+                        onChange={(e) => {
+                          const t = Number(e.target.value);
+                          setMyVoiceCurrentTime(t);
+
+                          const audio = myVoiceRef.current;
+                          if (!audio) return;
+
+                          audio.currentTime = t;
+                          void audio.play();
+                        }}
+                        className="w-20 h-1 accent-pink-400 cursor-pointer"
+                      />
+                      <span className="text-[10px] font-mono text-pink-500 w-8 text-right tabular-nums">
+                        {formatTime(myVoiceCurrentTime)}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-bold text-pink-400">
+                      You
                     </span>
                   </div>
-                  <span className="text-[11px] font-bold text-pink-400">
-                    You
-                  </span>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            {errorMessage && (
-              <p className="mt-3 rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-xs text-red-600">
-                {errorMessage}
-              </p>
-            )}
-          </Card>
+              {errorMessage && (
+                <p className="mt-3 rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-xs text-red-600">
+                  {errorMessage}
+                </p>
+              )}
+            </Card>
+          )}
 
           {/* ── Warning banners ── */}
           {result && result.recognitionStatus !== "Success" && (
