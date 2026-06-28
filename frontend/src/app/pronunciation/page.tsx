@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import {
@@ -31,6 +31,13 @@ import { SpeechEvaluateResponse } from "@/types/pronunciation";
 
 const MIC_AUTO_RELEASE_MS = 90_000;
 const RECORDING_MAX_MS = 35_000;
+const MAX_SAMPLE_AUDIO_CACHE_ITEMS = 20;
+
+type CachedSampleAudio = {
+  url: string;
+  size: number;
+  lastUsedAt: number;
+};
 
 // ── Static data ──────────────────────────────────────────────
 const getCategoryIcon = (categoryKey: string | null) => {
@@ -42,6 +49,44 @@ const getCategoryIcon = (categoryKey: string | null) => {
 };
 
 // ── Helpers ──────────────────────────────────────────────────
+function buildSampleAudioCacheKey(template: SentenceTemplate): string {
+  return `${template.id}:${template.sampleAudioText}`;
+}
+
+function evictOldSampleAudioCache(cache: Map<string, CachedSampleAudio>): void {
+  if (cache.size <= MAX_SAMPLE_AUDIO_CACHE_ITEMS) {
+    return;
+  }
+
+  const entriesByOldest = [...cache.entries()].sort(
+    ([, a], [, b]) => a.lastUsedAt - b.lastUsedAt,
+  );
+
+  while (cache.size > MAX_SAMPLE_AUDIO_CACHE_ITEMS) {
+    const nextEviction = entriesByOldest.shift();
+
+    if (!nextEviction) {
+      return;
+    }
+
+    const [cacheKey, cached] = nextEviction;
+    URL.revokeObjectURL(cached.url);
+    cache.delete(cacheKey);
+  }
+}
+
+function removeCachedSampleAudioForTemplate(
+  cache: Map<string, CachedSampleAudio>,
+  templateId: string,
+): void {
+  for (const [cacheKey, cached] of cache.entries()) {
+    if (cacheKey.startsWith(`${templateId}:`)) {
+      URL.revokeObjectURL(cached.url);
+      cache.delete(cacheKey);
+    }
+  }
+}
+
 const scoreTextColor = (score: number) => {
   if (score >= 80) return "text-emerald-600";
   if (score >= 60) return "text-amber-500";
@@ -213,7 +258,6 @@ export default function PronunciationPage() {
     null,
   );
   const [categoryFormName, setCategoryFormName] = useState("");
-  const [categoryFormKey, setCategoryFormKey] = useState("");
   const [categoryFormDesc, setCategoryFormDesc] = useState("");
 
   // ── Template CRUD state ───────────────────────────────────
@@ -243,8 +287,14 @@ export default function PronunciationPage() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const myVoiceRef = useRef<HTMLAudioElement>(null);
   const pendingTemplateSelectRef = useRef<string | null>(null);
+  const sampleAudioCacheRef = useRef<Map<string, CachedSampleAudio>>(new Map());
+  const sampleAudioLoadingRef = useRef<Map<string, Promise<string>>>(new Map());
+  const pendingSampleAudioAutoPlayRef = useRef(false);
+  const templateMovedToastTimerRef = useRef<number | null>(null);
 
   const resetSampleAudioState = () => {
+    pendingSampleAudioAutoPlayRef.current = false;
+
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.removeAttribute("src");
@@ -256,6 +306,60 @@ export default function PronunciationPage() {
     setCurrentTime(0);
     setDuration(0);
     setTtsLoading(false);
+  };
+
+  const getOrCreateSampleAudioUrl = useCallback(
+    async (template: SentenceTemplate): Promise<string> => {
+      const cacheKey = buildSampleAudioCacheKey(template);
+      const cached = sampleAudioCacheRef.current.get(cacheKey);
+
+      if (cached) {
+        cached.lastUsedAt = Date.now();
+        return cached.url;
+      }
+
+      const loading = sampleAudioLoadingRef.current.get(cacheKey);
+
+      if (loading) {
+        return loading;
+      }
+
+      const loadingPromise = generateTemplateSampleAudio(template.id)
+        .then((audioBlob) => {
+          const objectUrl = URL.createObjectURL(audioBlob);
+
+          sampleAudioCacheRef.current.set(cacheKey, {
+            url: objectUrl,
+            size: audioBlob.size,
+            lastUsedAt: Date.now(),
+          });
+
+          evictOldSampleAudioCache(sampleAudioCacheRef.current);
+
+          return objectUrl;
+        })
+        .finally(() => {
+          sampleAudioLoadingRef.current.delete(cacheKey);
+        });
+
+      sampleAudioLoadingRef.current.set(cacheKey, loadingPromise);
+
+      return loadingPromise;
+    },
+    [],
+  );
+
+  const showTemplateMovedToast = (message: string) => {
+    if (templateMovedToastTimerRef.current) {
+      window.clearTimeout(templateMovedToastTimerRef.current);
+    }
+
+    setTemplateMovedToast(message);
+
+    templateMovedToastTimerRef.current = window.setTimeout(() => {
+      setTemplateMovedToast(null);
+      templateMovedToastTimerRef.current = null;
+    }, 2500);
   };
 
   // ── Mic helpers ───────────────────────────────────────────
@@ -292,14 +396,33 @@ export default function PronunciationPage() {
   };
 
   useEffect(() => {
+    const sampleAudioCache = sampleAudioCacheRef.current;
+    const sampleAudioLoading = sampleAudioLoadingRef.current;
+
     return () => {
       clearRecordingLimitTimer();
 
-      if (releaseTimerRef.current) window.clearTimeout(releaseTimerRef.current);
+      if (releaseTimerRef.current) {
+        window.clearTimeout(releaseTimerRef.current);
+      }
+
+      if (templateMovedToastTimerRef.current) {
+        window.clearTimeout(templateMovedToastTimerRef.current);
+      }
+
       processorRef.current?.disconnect();
       sourceRef.current?.disconnect();
       recordingStreamRef.current?.getTracks().forEach((t) => t.stop());
-      if (audioContextRef.current) void audioContextRef.current.close();
+
+      if (audioContextRef.current) {
+        void audioContextRef.current.close();
+      }
+
+      sampleAudioCache.forEach((cached) => {
+        URL.revokeObjectURL(cached.url);
+      });
+      sampleAudioCache.clear();
+      sampleAudioLoading.clear();
     };
   }, []);
 
@@ -640,7 +763,6 @@ export default function PronunciationPage() {
       return;
     }
 
-    // If already generated, toggle play/pause
     if (audioUrl && audioRef.current) {
       if (audioRef.current.paused) {
         void audioRef.current.play();
@@ -659,32 +781,32 @@ export default function PronunciationPage() {
       setTtsLoading(true);
       setErrorMessage("");
 
-      const audioBlob = await generateTemplateSampleAudio(selectedTemplate.id);
-      const objectUrl = URL.createObjectURL(audioBlob);
+      const objectUrl = await getOrCreateSampleAudioUrl(selectedTemplate);
 
-      setAudioUrl((previousUrl) => {
-        if (previousUrl?.startsWith("blob:")) {
-          URL.revokeObjectURL(previousUrl);
-        }
-
-        return objectUrl;
-      });
+      pendingSampleAudioAutoPlayRef.current = true;
+      setAudioUrl(objectUrl);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to generate sample audio.",
+        error instanceof Error ? error.message : "Failed to load sample audio.",
       );
     } finally {
       setTtsLoading(false);
     }
   };
 
-  // Auto-play when audioUrl is set
   useEffect(() => {
-    if (audioUrl && audioRef.current) {
-      void audioRef.current.play();
+    if (!audioUrl || !audioRef.current) {
+      return;
     }
+
+    audioRef.current.load();
+
+    if (!pendingSampleAudioAutoPlayRef.current) {
+      return;
+    }
+
+    pendingSampleAudioAutoPlayRef.current = false;
+    void audioRef.current.play();
   }, [audioUrl]);
 
   // ── Scoring ───────────────────────────────────────────────
@@ -730,24 +852,6 @@ export default function PronunciationPage() {
     return result.phonemes.filter(
       (p) => p.word?.toLowerCase() === word.toLowerCase(),
     );
-  };
-
-  const resetPracticeState = () => {
-    setResult(null);
-    setAudioFile(null);
-
-    setAudioUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
-
-    setRecordedAudioUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
-
-    setIsPlaying(false);
-    setCurrentTime(0);
   };
 
   const selectTemplate = (template: SentenceTemplate) => {
@@ -803,7 +907,6 @@ export default function PronunciationPage() {
   const openNewCategoryForm = (isMobile: boolean) => {
     setEditingCategoryId(null);
     setCategoryFormName("");
-    setCategoryFormKey("");
     setCategoryFormDesc("");
     if (isMobile) {
       setSheetView("category-form");
@@ -815,7 +918,6 @@ export default function PronunciationPage() {
   const openEditCategoryForm = (cat: SentenceCategory, isMobile: boolean) => {
     setEditingCategoryId(cat.id);
     setCategoryFormName(cat.displayName);
-    setCategoryFormKey(cat.categoryKey ?? "");
     setCategoryFormDesc(cat.description ?? "");
     if (isMobile) {
       setSheetView("category-form");
@@ -972,12 +1074,20 @@ export default function PronunciationPage() {
         ? await updateSentenceTemplate(editingTemplateId, request)
         : await createSentenceTemplate(request);
 
+      if (editingTemplateId) {
+        removeCachedSampleAudioForTemplate(
+          sampleAudioCacheRef.current,
+          editingTemplateId,
+        );
+      }
+
       const movedToAnotherCategory = selectedCategoryId !== destCategoryId;
 
       if (movedToAnotherCategory) {
         pendingTemplateSelectRef.current = savedTemplate.id;
         setSelectedCategoryId(destCategoryId);
         resetSampleAudioState();
+        showTemplateMovedToast("Practice sentence moved to another category.");
       } else {
         const nextTemplates = await fetchSentenceTemplates(destCategoryId);
         setTemplates(nextTemplates);
@@ -1019,6 +1129,11 @@ export default function PronunciationPage() {
 
       await deleteSentenceTemplate(templateId);
 
+      removeCachedSampleAudioForTemplate(
+        sampleAudioCacheRef.current,
+        templateId,
+      );
+
       if (selectedCategoryId) {
         const nextTemplates = await fetchSentenceTemplates(selectedCategoryId);
         setTemplates(nextTemplates);
@@ -1052,6 +1167,48 @@ export default function PronunciationPage() {
   const filteredTemplates = favoritesOnly
     ? templates.filter((t) => favorites.has(t.id))
     : templates;
+
+  useEffect(() => {
+    if (!selectedTemplate) {
+      return;
+    }
+
+    let ignore = false;
+
+    const preloadSampleAudio = async () => {
+      try {
+        setTtsLoading(true);
+        setErrorMessage("");
+
+        const objectUrl = await getOrCreateSampleAudioUrl(selectedTemplate);
+
+        if (ignore) {
+          return;
+        }
+
+        pendingSampleAudioAutoPlayRef.current = false;
+        setAudioUrl(objectUrl);
+      } catch (error) {
+        if (!ignore) {
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Failed to prepare sample audio.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setTtsLoading(false);
+        }
+      }
+    };
+
+    void preloadSampleAudio();
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedTemplate, getOrCreateSampleAudioUrl]);
 
   // ── Time formatter ────────────────────────────────────────
   const formatTime = (sec: number) => {
