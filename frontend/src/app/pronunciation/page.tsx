@@ -659,14 +659,15 @@ export default function PronunciationPage() {
       setTtsLoading(true);
       setErrorMessage("");
 
-      const response = await generateTemplateSampleAudio(selectedTemplate.id);
+      const audioBlob = await generateTemplateSampleAudio(selectedTemplate.id);
+      const objectUrl = URL.createObjectURL(audioBlob);
 
       setAudioUrl((previousUrl) => {
         if (previousUrl?.startsWith("blob:")) {
           URL.revokeObjectURL(previousUrl);
         }
 
-        return response.audioUrl;
+        return objectUrl;
       });
     } catch (error) {
       setErrorMessage(

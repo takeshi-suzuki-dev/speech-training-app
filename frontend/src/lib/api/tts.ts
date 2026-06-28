@@ -1,11 +1,5 @@
 import { apiFetch } from "@/lib/api/apiFetch";
 
-export type SampleAudioResponse = {
-  audioPath: string;
-  audioUrl: string;
-  generated: boolean;
-};
-
 export async function generateSampleSpeech(text: string): Promise<Blob> {
   const response = await apiFetch("/api/tts", {
     method: "POST",
@@ -21,7 +15,7 @@ export async function generateSampleSpeech(text: string): Promise<Blob> {
 
 export async function generateTemplateSampleAudio(
   templateId: string,
-): Promise<SampleAudioResponse> {
+): Promise<Blob> {
   const response = await apiFetch(
     `/api/sentence-templates/${templateId}/sample-audio`,
     {
@@ -33,7 +27,7 @@ export async function generateTemplateSampleAudio(
     throw new Error(getTtsApiErrorMessage(response.status));
   }
 
-  return response.json();
+  return response.blob();
 }
 
 function getTtsApiErrorMessage(status: number): string {
@@ -47,6 +41,10 @@ function getTtsApiErrorMessage(status: number): string {
 
   if (status === 403) {
     return "This demo is available upon request. Please contact the developer if you need access.";
+  }
+
+  if (status === 404) {
+    return "Sample audio is not available for this sentence.";
   }
 
   if (status === 429) {
