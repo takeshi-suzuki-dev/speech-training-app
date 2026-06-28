@@ -12,26 +12,12 @@ import { auth, googleProvider } from "@/lib/firebase";
 
 export function AuthPanel() {
   const [user, setUser] = useState<User | null>(null);
-  const [idTokenPreview, setIdTokenPreview] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-
   const loginInProgressRef = useRef(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-
-      if (!currentUser) {
-        setIdTokenPreview(null);
-        return;
-      }
-
-      const token = await currentUser.getIdToken();
-
-      console.log("Firebase uid:", currentUser.uid);
-      console.log("Firebase ID token:", token);
-
-      setIdTokenPreview(`${token.slice(0, 24)}...`);
     });
 
     return () => unsubscribe();
@@ -39,7 +25,6 @@ export function AuthPanel() {
 
   const handleLogin = async () => {
     if (loginInProgressRef.current) {
-      console.log("Login is already in progress. Ignored.");
       return;
     }
 
@@ -54,7 +39,6 @@ export function AuthPanel() {
           error.code === "auth/cancelled-popup-request" ||
           error.code === "auth/popup-closed-by-user"
         ) {
-          console.warn("Google login popup was cancelled.");
           return;
         }
       }
@@ -74,48 +58,35 @@ export function AuthPanel() {
     }
   };
 
-  const handleCheckBackendAuth = async () => {
-    if (!user) return;
-
-    const token = await user.getIdToken();
-
-    const response = await fetch("http://localhost:8080/api/auth/me", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const data = await response.json();
-    console.log("Backend auth response:", data);
-  };
-
   return (
-    <div
-      style={{
-        border: "1px solid #ddd",
-        padding: "16px",
-        borderRadius: "8px",
-      }}
-    >
-      <h2>Auth Test</h2>
+    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <h2 className="mb-3 text-sm font-semibold text-slate-700">Account</h2>
 
       {user ? (
-        <div>
-          <p>Logged in as: {user.email}</p>
-          <p>UID: {user.uid}</p>
-          {idTokenPreview && <p>ID Token: {idTokenPreview}</p>}
-          <button type="button" onClick={handleLogout}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-slate-600">
+            Signed in as{" "}
+            <span className="font-medium text-slate-900">{user.email}</span>
+          </p>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
             Logout
-          </button>
-          <button type="button" onClick={handleCheckBackendAuth}>
-            Check backend auth
           </button>
         </div>
       ) : (
-        <button type="button" onClick={handleLogin} disabled={isLoggingIn}>
+        <button
+          type="button"
+          onClick={handleLogin}
+          disabled={isLoggingIn}
+          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
           {isLoggingIn ? "Logging in..." : "Login with Google"}
         </button>
       )}
-    </div>
+    </section>
   );
 }
