@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.takeshi.backend.dto.response.SampleAudioResponse;
 import com.takeshi.backend.entity.SentenceTemplate;
 import com.takeshi.backend.entity.SentenceTemplateAudio;
 import com.takeshi.backend.repository.SentenceTemplateAudioRepository;
@@ -37,7 +36,7 @@ public class SampleAudioService {
     }
 
     @Transactional
-    public SampleAudioResponse generateOrGet(
+    public byte[] generateOrGetAudio(
             UUID sentenceTemplateId,
             String firebaseUid) {
         SentenceTemplate template = sentenceTemplateRepository.findById(sentenceTemplateId)
@@ -56,10 +55,7 @@ public class SampleAudioService {
                                 "Sentence template audio metadata not found."));
 
         if (audio.getAudioPath() != null && !audio.getAudioPath().isBlank()) {
-            return new SampleAudioResponse(
-                    audio.getAudioPath(),
-                    supabaseStorageService.buildPublicUrl(audio.getAudioPath()),
-                    false);
+            return supabaseStorageService.downloadMp3(audio.getAudioPath());
         }
 
         byte[] mp3Bytes = ttsService.generate(
@@ -73,10 +69,7 @@ public class SampleAudioService {
         audio.setAudioPath(audioPath);
         sentenceTemplateAudioRepository.save(audio);
 
-        return new SampleAudioResponse(
-                audioPath,
-                supabaseStorageService.buildPublicUrl(audioPath),
-                true);
+        return mp3Bytes;
     }
 
     private void requireSampleAudioAccess(

@@ -23,6 +23,23 @@ public class SupabaseStorageService {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
+    public byte[] downloadMp3(String objectPath) {
+        String url = buildObjectUrl(objectPath);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("apikey", serviceRoleKey);
+        headers.setBearerAuth(serviceRoleKey);
+
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+
+        return restTemplate.exchange(
+                url,
+                HttpMethod.GET,
+                request,
+                byte[].class)
+                .getBody();
+    }
+
     public String uploadMp3(String objectPath, byte[] mp3Bytes) {
         String url = buildObjectUrl(objectPath);
 
