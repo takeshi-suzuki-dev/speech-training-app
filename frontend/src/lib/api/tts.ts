@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/lib/config";
+import { apiFetch } from "@/lib/api/apiFetch";
 
 export type SampleAudioResponse = {
   audioPath: string;
@@ -7,10 +7,9 @@ export type SampleAudioResponse = {
 };
 
 export async function generateSampleSpeech(text: string): Promise<Blob> {
-  const response = await fetch(`${API_BASE_URL}/api/tts`, {
+  const response = await apiFetch("/api/tts", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    json: { text },
   });
 
   if (!response.ok) {
@@ -20,35 +19,43 @@ export async function generateSampleSpeech(text: string): Promise<Blob> {
   return response.blob();
 }
 
-function getTtsApiErrorMessage(status: number): string {
-  if (status === 400) {
-    return "Invalid text-to-speech request. Please check the text.";
-  }
-  if (status === 401 || status === 403) {
-    return "Text-to-speech service authentication failed.";
-  }
-  if (status === 429) {
-    return "Text-to-speech quota or rate limit was reached. Please try again later.";
-  }
-  if (status >= 500) {
-    return "Text-to-speech service error. Please try again later.";
-  }
-  return "Failed to generate sample audio. Please try again.";
-}
-
 export async function generateTemplateSampleAudio(
   templateId: string,
 ): Promise<SampleAudioResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/sentence-templates/${templateId}/sample-audio`,
+  const response = await apiFetch(
+    `/api/sentence-templates/${templateId}/sample-audio`,
     {
       method: "POST",
     },
   );
 
   if (!response.ok) {
-    throw new Error("Failed to generate sample audio.");
+    throw new Error(getTtsApiErrorMessage(response.status));
   }
 
   return response.json();
+}
+
+function getTtsApiErrorMessage(status: number): string {
+  if (status === 400) {
+    return "Invalid text-to-speech request. Please check the text.";
+  }
+
+  if (status === 401) {
+    return "Please log in to generate sample audio.";
+  }
+
+  if (status === 403) {
+    return "This demo is available upon request. Please contact the developer if you need access.";
+  }
+
+  if (status === 429) {
+    return "Text-to-speech quota or rate limit was reached. Please try again later.";
+  }
+
+  if (status >= 500) {
+    return "Text-to-speech service error. Please try again later.";
+  }
+
+  return "Failed to generate sample audio. Please try again.";
 }
