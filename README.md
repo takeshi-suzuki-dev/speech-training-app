@@ -25,7 +25,8 @@ This project is developed in phases:
 
 - Phase 0: PoC — completed
 - Phase 1: Fixed-template MVP — completed
-- Phase 2: Authentication and user-defined practice sentences
+- Phase 2: Authentication and user-defined practice sentences — in progress
+- Phase 2.1: Controlled portfolio demo access — in progress
 - Phase 3: Plan-based features, billing, and IT engineer vocabulary practice
 - Phase 4: Interview FAQ and free-answer practice
 
@@ -33,6 +34,8 @@ For details:
 
 - [Development Roadmap (EN)](docs/en/roadmap.md)
 - [開発フェーズ定義 (JP)](docs/jp/開発フェーズ定義.md)
+- [Phase 2 Current Status](docs/en/phase-2-current-status.md)
+- [Phase 2 Controlled Demo Requirements](docs/en/phase-2-controlled-demo-requirements.md)
 
 ---
 
@@ -119,27 +122,42 @@ Implemented scope:
 - Frontend configuration such as `API_BASE_URL` centralized under `frontend/src/lib/config.ts`
 - Backend project directory flattened to `backend/`
 
+## Current Phase
+
+### Phase 2 — Authentication, User-defined Practice Sentences, and Controlled Demo Access
+
+Phase 2 is currently in progress on the `feature/auth-user-templates` branch.
+
+This phase introduces Firebase / Google authentication, user-defined categories, user-defined sentence templates, favorites, and Firebase UID based ownership for some user-defined data.
+
+The current goal is not to launch the app as a public SaaS. The goal is to make it safe enough to use as a controlled portfolio demo for recruiters.
+
+Implemented or partially implemented scope:
+
+- Firebase / Google authentication
+- User-defined categories
+- User-defined practice sentences
+- Favorite templates
+- Firebase UID based ownership for some user-defined data
+
+Remaining scope before controlled recruiter demo:
+
+- Consistent authentication for protected backend APIs
+- Application-level allowlist for live app access
+- Access control for user-specific templates and audio
+- Protected handling for user-defined sample audio
+- Frontend API calls with Firebase ID tokens
+- Clear unauthorized / forbidden UI states
+- Production CORS configuration
+
+For details:
+
+- [Phase 2 Current Status](docs/phase-2-current-status.md)
+- [Phase 2 Controlled Demo Requirements](docs/phase-2-controlled-demo-requirements.md)
+
 ---
 
 ## Future Plans
-
-### Phase 2 — Authentication and User-defined Practice Sentences
-
-Phase 2 introduces authentication because user-defined practice sentences may contain private career history, interview answers, and personal learning material.
-
-Planned scope:
-
-- Login / authentication
-- User management
-- Authenticated `user_id`
-- User-defined practice sentences
-- User-defined categories if needed
-- Sample audio generation for user-defined sentences
-- Pronunciation scoring for user-defined sentences
-- User-specific history
-- Access control for user-specific templates and audio
-- Protected handling for user-specific sample audio
-- Private bucket, signed URL, or backend-mediated audio delivery if needed
 
 ### Phase 3 — Plan-based Features, Billing, and IT Engineer Vocabulary Practice
 
