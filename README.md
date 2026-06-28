@@ -152,8 +152,8 @@ Remaining scope before controlled recruiter demo:
 
 For details:
 
-- [Phase 2 Current Status](docs/phase-2-current-status.md)
-- [Phase 2 Controlled Demo Requirements](docs/phase-2-controlled-demo-requirements.md)
+- [Phase 2 Current Status](docs/en/phase-2-current-status.md)
+- [Phase 2 Controlled Demo Requirements](docs/en/phase-2-controlled-demo-requirements.md)
 
 ---
 
