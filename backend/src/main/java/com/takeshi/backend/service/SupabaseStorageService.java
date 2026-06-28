@@ -88,12 +88,4 @@ public class SupabaseStorageService {
                 + "/"
                 + objectPath;
     }
-
-    public String buildPublicUrl(String objectPath) {
-        return supabaseUrl
-                + "/storage/v1/object/public/"
-                + bucketName
-                + "/"
-                + objectPath;
-    }
 }
