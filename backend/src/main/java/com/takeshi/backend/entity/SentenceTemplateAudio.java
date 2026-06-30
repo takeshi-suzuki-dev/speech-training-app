@@ -1,11 +1,16 @@
 package com.takeshi.backend.entity;
 
-import jakarta.persistence.*;
+import java.time.OffsetDateTime;
+import java.util.UUID;
+
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.time.OffsetDateTime;
-import java.util.UUID;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "sentence_template_audios")
@@ -19,6 +24,9 @@ public class SentenceTemplateAudio {
 
     @Column(name = "sentence_template_id", nullable = false)
     private UUID sentenceTemplateId;
+
+    @Column(name = "voice_option_id")
+    private UUID voiceOptionId;
 
     @Column(name = "voice_role", nullable = false)
     private String voiceRole;
@@ -47,6 +55,10 @@ public class SentenceTemplateAudio {
         return sentenceTemplateId;
     }
 
+    public UUID getVoiceOptionId() {
+        return voiceOptionId;
+    }
+
     public String getVoiceRole() {
         return voiceRole;
     }
@@ -69,5 +81,9 @@ public class SentenceTemplateAudio {
 
     public void setAudioPath(String audioPath) {
         this.audioPath = audioPath;
+    }
+
+    public void setVoiceOptionId(UUID voiceOptionId) {
+        this.voiceOptionId = voiceOptionId;
     }
 }
