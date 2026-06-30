@@ -33,9 +33,40 @@ create table public.sentence_templates (
     on delete restrict
 );
 
+create table public.sentence_template_voice_options (
+  id uuid not null default gen_random_uuid(),
+  sentence_template_id uuid not null,
+  slot_key text not null,
+  voice_id text not null,
+  voice_name text not null,
+  voice_provider text not null default 'elevenlabs',
+  model_id text null,
+  sort_order integer not null default 0,
+  is_default boolean not null default false,
+  is_active boolean not null default true,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  deleted_at timestamp with time zone null,
+
+  constraint sentence_template_voice_options_pkey primary key (id),
+
+  constraint sentence_template_voice_options_template_fkey
+    foreign key (sentence_template_id)
+    references public.sentence_templates(id)
+    on delete restrict
+);
+
+create index idx_sentence_template_voice_options_template_id
+on public.sentence_template_voice_options(sentence_template_id);
+
+create unique index sentence_template_voice_options_active_slot_unique
+on public.sentence_template_voice_options(sentence_template_id, slot_key)
+where deleted_at is null;
+
 create table public.sentence_template_audios (
   id uuid not null default gen_random_uuid(),
   sentence_template_id uuid not null,
+  voice_option_id uuid null,
   voice_role text not null,
   voice_id text not null,
   model_id text null,
@@ -49,9 +80,21 @@ create table public.sentence_template_audios (
     references public.sentence_templates(id)
     on delete cascade,
 
+  constraint sentence_template_audios_voice_option_fkey
+    foreign key (voice_option_id)
+    references public.sentence_template_voice_options(id)
+    on delete set null,
+
   constraint sentence_template_audios_unique
     unique (sentence_template_id, voice_role)
 );
+
+create index idx_sentence_template_audios_voice_option_id
+on public.sentence_template_audios(voice_option_id);
+
+create unique index sentence_template_audios_template_voice_option_unique
+on public.sentence_template_audios(sentence_template_id, voice_option_id)
+where voice_option_id is not null;
 
 create table public.training_attempts (
   id uuid not null default gen_random_uuid(),
