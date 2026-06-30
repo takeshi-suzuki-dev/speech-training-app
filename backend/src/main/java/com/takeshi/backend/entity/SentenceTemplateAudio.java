@@ -47,6 +47,18 @@ public class SentenceTemplateAudio {
     protected SentenceTemplateAudio() {
     }
 
+    public SentenceTemplateAudio(
+            UUID sentenceTemplateId,
+            String voiceRole,
+            String voiceId,
+            String modelId) {
+        this.sentenceTemplateId = sentenceTemplateId;
+        this.voiceRole = voiceRole;
+        this.voiceId = voiceId;
+        this.modelId = modelId;
+        this.audioPath = null;
+    }
+
     public UUID getId() {
         return id;
     }

@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/lib/config";
+import { apiFetch } from "@/lib/api/apiFetch";
 import { getOrCreateClientId } from "@/lib/clientId";
 
 export type TrainingAttemptResult = {
@@ -36,8 +36,8 @@ export async function fetchLatestAssessmentResultsBySentence(): Promise<
 > {
   const clientId = getOrCreateClientId();
 
-  const response = await fetch(
-    `${API_BASE_URL}/api/sentence-latest-scores?clientId=${clientId}`,
+  const response = await apiFetch(
+    `/api/sentence-latest-scores?clientId=${encodeURIComponent(clientId)}`,
   );
 
   if (!response.ok) {
@@ -54,8 +54,10 @@ export async function fetchDailyScoreTrends(): Promise<
 > {
   const clientId = getOrCreateClientId();
 
-  const response = await fetch(
-    `${API_BASE_URL}/api/training-attempts/history-trends?clientId=${clientId}`,
+  const response = await apiFetch(
+    `/api/training-attempts/history-trends?clientId=${encodeURIComponent(
+      clientId,
+    )}`,
   );
 
   if (!response.ok) {

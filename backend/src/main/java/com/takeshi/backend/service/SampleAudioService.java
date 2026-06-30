@@ -1,5 +1,6 @@
 package com.takeshi.backend.service;
 
+import java.util.Objects;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -7,7 +8,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.takeshi.backend.dto.response.SampleAudioResponse;
 import com.takeshi.backend.entity.SentenceTemplate;
 import com.takeshi.backend.entity.SentenceTemplateAudio;
 import com.takeshi.backend.repository.SentenceTemplateAudioRepository;
@@ -36,12 +36,16 @@ public class SampleAudioService {
     }
 
     @Transactional
-    public SampleAudioResponse generateOrGet(UUID sentenceTemplateId) {
+    public byte[] generateOrGetAudio(
+            UUID sentenceTemplateId,
+            String firebaseUid) {
         SentenceTemplate template = sentenceTemplateRepository.findById(sentenceTemplateId)
                 .orElseThrow(
                         () -> new ResponseStatusException(
                                 HttpStatus.NOT_FOUND,
                                 "Sentence template not found."));
+
+        requireSampleAudioAccess(template, firebaseUid);
 
         SentenceTemplateAudio audio = sentenceTemplateAudioRepository
                 .findBySentenceTemplateIdAndVoiceRole(sentenceTemplateId, PHASE1_VOICE_ROLE)
@@ -51,9 +55,7 @@ public class SampleAudioService {
                                 "Sentence template audio metadata not found."));
 
         if (audio.getAudioPath() != null && !audio.getAudioPath().isBlank()) {
-            return new SampleAudioResponse(
-                    audio.getAudioPath(),
-                    supabaseStorageService.buildPublicUrl(audio.getAudioPath()), false);
+            return supabaseStorageService.downloadMp3(audio.getAudioPath());
         }
 
         byte[] mp3Bytes = ttsService.generate(
@@ -61,21 +63,49 @@ public class SampleAudioService {
                 audio.getVoiceId(),
                 audio.getModelId());
 
-        String audioPath = buildAudioPath(sentenceTemplateId);
-
+        String audioPath = buildAudioPath(template, sentenceTemplateId);
         supabaseStorageService.uploadMp3(audioPath, mp3Bytes);
 
         audio.setAudioPath(audioPath);
         sentenceTemplateAudioRepository.save(audio);
 
-        return new SampleAudioResponse(
-                audioPath,
-                supabaseStorageService.buildPublicUrl(audioPath),
-                true);
+        return mp3Bytes;
     }
 
-    private String buildAudioPath(UUID sentenceTemplateId) {
-        return "preset/"
+    private void requireSampleAudioAccess(
+            SentenceTemplate template,
+            String firebaseUid) {
+        if (!Boolean.TRUE.equals(template.getActive())) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Sentence template not found.");
+        }
+
+        String ownerFirebaseUid = template.getOwnerFirebaseUid();
+
+        if (ownerFirebaseUid == null || ownerFirebaseUid.isBlank()) {
+            return;
+        }
+
+        if (!Objects.equals(ownerFirebaseUid, firebaseUid)) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Sentence template not found.");
+        }
+    }
+
+    private String buildAudioPath(
+            SentenceTemplate template,
+            UUID sentenceTemplateId) {
+        String ownerFirebaseUid = template.getOwnerFirebaseUid();
+
+        if (ownerFirebaseUid == null || ownerFirebaseUid.isBlank()) {
+            return "preset/" + sentenceTemplateId + "/" + PHASE1_VOICE_NAME + ".mp3";
+        }
+
+        return "users/"
+                + ownerFirebaseUid
+                + "/templates/"
                 + sentenceTemplateId
                 + "/"
                 + PHASE1_VOICE_NAME

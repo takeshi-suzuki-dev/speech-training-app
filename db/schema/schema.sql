@@ -3,6 +3,7 @@ create table public.sentence_categories (
   category_key text null,
   display_name text not null,
   description text null,
+  owner_firebase_uid text null,
   sort_order integer not null default 0,
   is_active boolean not null default true,
   created_at timestamp with time zone not null default now(),
@@ -14,6 +15,7 @@ create table public.sentence_categories (
 create table public.sentence_templates (
   id uuid not null default gen_random_uuid(),
   category_id uuid not null,
+  owner_firebase_uid text,
   template_key text null,
   title text not null,
   display_text text not null,
@@ -83,7 +85,7 @@ create table public.sentence_template_audios (
   constraint sentence_template_audios_voice_option_fkey
     foreign key (voice_option_id)
     references public.sentence_template_voice_options(id)
-    on delete set null,
+    on delete restrict,
 
   constraint sentence_template_audios_unique
     unique (sentence_template_id, voice_role)
@@ -95,6 +97,26 @@ on public.sentence_template_audios(voice_option_id);
 create unique index sentence_template_audios_template_voice_option_unique
 on public.sentence_template_audios(sentence_template_id, voice_option_id)
 where voice_option_id is not null;
+
+create table public.template_favorites (
+  user_id text not null,
+  sentence_template_id uuid not null,
+  created_at timestamp with time zone not null default now(),
+
+  constraint template_favorites_pkey
+    primary key (user_id, sentence_template_id),
+
+  constraint template_favorites_sentence_template_id_fkey
+    foreign key (sentence_template_id)
+    references public.sentence_templates(id)
+    on delete cascade
+);
+
+create index idx_template_favorites_user_id
+on public.template_favorites(user_id);
+
+create index idx_template_favorites_sentence_template_id
+on public.template_favorites(sentence_template_id);
 
 create table public.training_attempts (
   id uuid not null default gen_random_uuid(),
@@ -125,3 +147,23 @@ create table public.training_attempts (
     mode = any (array['sentence'::text, 'free'::text])
   )
 );
+
+create table if not exists public.app_allowed_users (
+    id bigserial primary key,
+    email text not null,
+    firebase_uid text unique,
+    role text not null,
+    is_active boolean not null default true,
+    expires_at timestamptz,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+
+    constraint app_allowed_users_role_check
+        check (role in ('OWNER', 'DEMO_RECRUITER'))
+);
+
+create unique index if not exists idx_app_allowed_users_lower_email
+    on public.app_allowed_users (lower(email));
+
+create index if not exists idx_app_allowed_users_firebase_uid
+    on public.app_allowed_users (firebase_uid);

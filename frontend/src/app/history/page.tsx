@@ -16,7 +16,7 @@ import {
   DailyScoreTrendResult,
   fetchDailyScoreTrends,
 } from "@/lib/api/assessmentResults";
-import AppNav from "@/app/components/AppNav";
+import AppNav from "@/components/AppNav";
 
 type TabType = "overall" | "breakdown";
 

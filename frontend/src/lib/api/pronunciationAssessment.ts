@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/lib/config";
+import { apiFetch } from "@/lib/api/apiFetch";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
 import { getOrCreateClientId } from "../clientId";
 
@@ -8,14 +8,17 @@ export async function scorePronunciation(
   sentenceId?: string,
 ): Promise<SpeechEvaluateResponse> {
   const formData = new FormData();
+
   formData.append("audio", audioFile);
   formData.append("referenceText", referencetext);
   formData.append("clientId", getOrCreateClientId());
   formData.append("mode", "sentence");
 
-  if (sentenceId) formData.append("sentenceId", sentenceId);
+  if (sentenceId) {
+    formData.append("sentenceId", sentenceId);
+  }
 
-  const response = await fetch(`${API_BASE_URL}/api/pronunciation/score`, {
+  const response = await apiFetch("/api/pronunciation/score", {
     method: "POST",
     body: formData,
   });
@@ -31,14 +34,22 @@ function getSpeechApiErrorMessage(status: number): string {
   if (status === 400) {
     return "Invalid request. Please check the audio file and reference text.";
   }
-  if (status === 401 || status === 403) {
-    return "Speech service authentication failed.";
+
+  if (status === 401) {
+    return "Please log in to use pronunciation scoring.";
   }
+
+  if (status === 403) {
+    return "This demo is available upon request. Please contact the developer if you need access.";
+  }
+
   if (status === 429) {
     return "Speech service quota or rate limit was reached. Please try again later.";
   }
+
   if (status >= 500) {
     return "Speech service error. Please try again later.";
   }
+
   return "Failed to evaluate pronunciation. Please try again.";
 }

@@ -1,11 +1,17 @@
-import { API_BASE_URL } from "@/lib/config";
+import { apiFetch } from "@/lib/api/apiFetch";
 
 export type SentenceCategory = {
   id: string;
-  categoryKey: string;
+  categoryKey: string | null;
   displayName: string;
   description: string | null;
   sortOrder: number;
+  userCategory: boolean;
+};
+
+export type SaveSentenceCategoryRequest = {
+  displayName: string;
+  description: string | null;
 };
 
 export type SentenceTemplate = {
@@ -20,8 +26,17 @@ export type SentenceTemplate = {
   sortOrder: number;
 };
 
+export type SaveSentenceTemplateRequest = {
+  categoryId: string;
+  title: string;
+  displayText: string;
+  scoringText: string;
+  sampleAudioText: string;
+  difficulty: string;
+};
+
 export async function fetchSentenceCategories(): Promise<SentenceCategory[]> {
-  const response = await fetch(`${API_BASE_URL}/api/sentence-categories`);
+  const response = await apiFetch("/api/sentence-categories");
 
   if (!response.ok) {
     throw new Error("Failed to fetch sentence categories.");
@@ -30,11 +45,54 @@ export async function fetchSentenceCategories(): Promise<SentenceCategory[]> {
   return response.json();
 }
 
+export async function createSentenceCategory(
+  request: SaveSentenceCategoryRequest,
+): Promise<SentenceCategory> {
+  const response = await apiFetch("/api/sentence-categories", {
+    method: "POST",
+    json: request,
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to create category.");
+  }
+
+  return response.json();
+}
+
+export async function updateSentenceCategory(
+  categoryId: string,
+  request: SaveSentenceCategoryRequest,
+): Promise<SentenceCategory> {
+  const response = await apiFetch(`/api/sentence-categories/${categoryId}`, {
+    method: "PUT",
+    json: request,
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to update category.");
+  }
+
+  return response.json();
+}
+
+export async function deleteSentenceCategory(
+  categoryId: string,
+): Promise<void> {
+  const response = await apiFetch(`/api/sentence-categories/${categoryId}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to delete category.");
+  }
+}
+
 export async function fetchSentenceTemplates(
   categoryId: string,
 ): Promise<SentenceTemplate[]> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/sentence-templates?categoryId=${categoryId}`,
+  const response = await apiFetch(
+    `/api/sentence-templates?categoryId=${encodeURIComponent(categoryId)}`,
   );
 
   if (!response.ok) {
@@ -42,4 +100,47 @@ export async function fetchSentenceTemplates(
   }
 
   return response.json();
+}
+
+export async function createSentenceTemplate(
+  request: SaveSentenceTemplateRequest,
+): Promise<SentenceTemplate> {
+  const response = await apiFetch("/api/sentence-templates", {
+    method: "POST",
+    json: request,
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to create practice sentence.");
+  }
+
+  return response.json();
+}
+
+export async function updateSentenceTemplate(
+  templateId: string,
+  request: SaveSentenceTemplateRequest,
+): Promise<SentenceTemplate> {
+  const response = await apiFetch(`/api/sentence-templates/${templateId}`, {
+    method: "PUT",
+    json: request,
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to update practice sentence.");
+  }
+
+  return response.json();
+}
+
+export async function deleteSentenceTemplate(
+  templateId: string,
+): Promise<void> {
+  const response = await apiFetch(`/api/sentence-templates/${templateId}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to delete practice sentence.");
+  }
 }

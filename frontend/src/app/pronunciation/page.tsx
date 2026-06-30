@@ -1,21 +1,43 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import {
   fetchLatestAssessmentResultsBySentence,
   TrainingAttemptResult,
 } from "@/lib/api/assessmentResults";
-import AppNav from "@/app/components/AppNav";
+import AppNav from "@/components/AppNav";
 import { scorePronunciation } from "@/lib/api/pronunciationAssessment";
 import {
+  createSentenceCategory,
+  createSentenceTemplate,
+  deleteSentenceCategory,
+  deleteSentenceTemplate,
   fetchSentenceCategories,
   fetchSentenceTemplates,
   SentenceCategory,
   SentenceTemplate,
+  updateSentenceCategory,
+  updateSentenceTemplate,
 } from "@/lib/api/sentenceTemplates";
 import { generateTemplateSampleAudio } from "@/lib/api/tts";
+import {
+  addTemplateFavorite,
+  fetchFavoriteTemplateIds,
+  removeTemplateFavorite,
+} from "@/lib/api/templateFavorites";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
+
+const MIC_AUTO_RELEASE_MS = 90_000;
+const RECORDING_MAX_MS = 35_000;
+const MAX_SAMPLE_AUDIO_CACHE_ITEMS = 20;
+
+type CachedSampleAudio = {
+  url: string;
+  size: number;
+  lastUsedAt: number;
+};
 
 // ── Static data ──────────────────────────────────────────────
 const getCategoryIcon = (categoryKey: string | null) => {
@@ -27,6 +49,44 @@ const getCategoryIcon = (categoryKey: string | null) => {
 };
 
 // ── Helpers ──────────────────────────────────────────────────
+function buildSampleAudioCacheKey(template: SentenceTemplate): string {
+  return `${template.id}:${template.sampleAudioText}`;
+}
+
+function evictOldSampleAudioCache(cache: Map<string, CachedSampleAudio>): void {
+  if (cache.size <= MAX_SAMPLE_AUDIO_CACHE_ITEMS) {
+    return;
+  }
+
+  const entriesByOldest = [...cache.entries()].sort(
+    ([, a], [, b]) => a.lastUsedAt - b.lastUsedAt,
+  );
+
+  while (cache.size > MAX_SAMPLE_AUDIO_CACHE_ITEMS) {
+    const nextEviction = entriesByOldest.shift();
+
+    if (!nextEviction) {
+      return;
+    }
+
+    const [cacheKey, cached] = nextEviction;
+    URL.revokeObjectURL(cached.url);
+    cache.delete(cacheKey);
+  }
+}
+
+function removeCachedSampleAudioForTemplate(
+  cache: Map<string, CachedSampleAudio>,
+  templateId: string,
+): void {
+  for (const [cacheKey, cached] of cache.entries()) {
+    if (cacheKey.startsWith(`${templateId}:`)) {
+      URL.revokeObjectURL(cached.url);
+      cache.delete(cacheKey);
+    }
+  }
+}
+
 const scoreTextColor = (score: number) => {
   if (score >= 80) return "text-emerald-600";
   if (score >= 60) return "text-amber-500";
@@ -68,8 +128,6 @@ function isEffectivelyNoSpeech(result: SpeechEvaluateResponse): boolean {
   );
 }
 
-const MIC_AUTO_RELEASE_MS = 90_000;
-
 const buildTemplateLatestScores = (
   attempts: TrainingAttemptResult[],
 ): Map<string, number> => {
@@ -98,6 +156,19 @@ const buildTemplateLatestScores = (
   }
 
   return result;
+};
+
+const upsertCategory = (
+  items: SentenceCategory[],
+  category: SentenceCategory,
+): SentenceCategory[] => {
+  const exists = items.some((item) => item.id === category.id);
+
+  const nextItems = exists
+    ? items.map((item) => (item.id === category.id ? category : item))
+    : [...items, category];
+
+  return nextItems.sort((a, b) => a.sortOrder - b.sortOrder);
 };
 
 // ── Score card bg classes ────────────────────────────────────
@@ -159,6 +230,8 @@ export default function PronunciationPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [expandedWord, setExpandedWord] = useState<number | null>(null);
   const [scored, setScored] = useState(false);
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   // ── Audio player state (TTS / Roger) ─────────────────────
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -170,11 +243,37 @@ export default function PronunciationPage() {
 
   // ── UI state ──────────────────────────────────────────────
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetView, setSheetView] = useState<
+    "phrases" | "categories" | "category-form" | "phrase-form"
+  >("phrases");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
     null,
   );
-  const [sidebarView, setSidebarView] = useState<"categories" | "phrases">(
-    "categories",
+  const [sidebarView, setSidebarView] = useState<
+    "categories" | "phrases" | "category-form" | "phrase-form"
+  >("categories");
+
+  // ── Category CRUD state ───────────────────────────────────
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(
+    null,
+  );
+  const [categoryFormName, setCategoryFormName] = useState("");
+  const [categoryFormDesc, setCategoryFormDesc] = useState("");
+
+  // ── Template CRUD state ───────────────────────────────────
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(
+    null,
+  );
+  const [templateFormCategoryId, setTemplateFormCategoryId] = useState<
+    string | null
+  >(null);
+  const [templateFormTitle, setTemplateFormTitle] = useState("");
+  const [templateFormText, setTemplateFormText] = useState("");
+  const [templateFormDifficulty, setTemplateFormDifficulty] = useState<
+    "easy" | "medium" | "hard" | ""
+  >("");
+  const [templateMovedToast, setTemplateMovedToast] = useState<string | null>(
+    null,
   );
 
   // ── Refs ──────────────────────────────────────────────────
@@ -184,11 +283,96 @@ export default function PronunciationPage() {
   const recordingStreamRef = useRef<MediaStream | null>(null);
   const recordedChunksRef = useRef<Float32Array[]>([]);
   const releaseTimerRef = useRef<number | null>(null);
+  const recordingLimitTimerRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const myVoiceRef = useRef<HTMLAudioElement>(null);
+  const pendingTemplateSelectRef = useRef<string | null>(null);
+  const sampleAudioCacheRef = useRef<Map<string, CachedSampleAudio>>(new Map());
+  const sampleAudioLoadingRef = useRef<Map<string, Promise<string>>>(new Map());
+  const pendingSampleAudioAutoPlayRef = useRef(false);
+  const templateMovedToastTimerRef = useRef<number | null>(null);
+
+  const resetSampleAudioState = () => {
+    pendingSampleAudioAutoPlayRef.current = false;
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.removeAttribute("src");
+      audioRef.current.load();
+    }
+
+    setAudioUrl(null);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setTtsLoading(false);
+  };
+
+  const getOrCreateSampleAudioUrl = useCallback(
+    async (template: SentenceTemplate): Promise<string> => {
+      const cacheKey = buildSampleAudioCacheKey(template);
+      const cached = sampleAudioCacheRef.current.get(cacheKey);
+
+      if (cached) {
+        cached.lastUsedAt = Date.now();
+        return cached.url;
+      }
+
+      const loading = sampleAudioLoadingRef.current.get(cacheKey);
+
+      if (loading) {
+        return loading;
+      }
+
+      const loadingPromise = generateTemplateSampleAudio(template.id)
+        .then((audioBlob) => {
+          const objectUrl = URL.createObjectURL(audioBlob);
+
+          sampleAudioCacheRef.current.set(cacheKey, {
+            url: objectUrl,
+            size: audioBlob.size,
+            lastUsedAt: Date.now(),
+          });
+
+          evictOldSampleAudioCache(sampleAudioCacheRef.current);
+
+          return objectUrl;
+        })
+        .finally(() => {
+          sampleAudioLoadingRef.current.delete(cacheKey);
+        });
+
+      sampleAudioLoadingRef.current.set(cacheKey, loadingPromise);
+
+      return loadingPromise;
+    },
+    [],
+  );
+
+  const showTemplateMovedToast = (message: string) => {
+    if (templateMovedToastTimerRef.current) {
+      window.clearTimeout(templateMovedToastTimerRef.current);
+    }
+
+    setTemplateMovedToast(message);
+
+    templateMovedToastTimerRef.current = window.setTimeout(() => {
+      setTemplateMovedToast(null);
+      templateMovedToastTimerRef.current = null;
+    }, 2500);
+  };
 
   // ── Mic helpers ───────────────────────────────────────────
+  const clearRecordingLimitTimer = () => {
+    if (recordingLimitTimerRef.current) {
+      window.clearTimeout(recordingLimitTimerRef.current);
+      recordingLimitTimerRef.current = null;
+    }
+  };
+
   const releaseMicrophone = () => {
+    clearRecordingLimitTimer();
+
     if (releaseTimerRef.current) {
       window.clearTimeout(releaseTimerRef.current);
       releaseTimerRef.current = null;
@@ -212,12 +396,33 @@ export default function PronunciationPage() {
   };
 
   useEffect(() => {
+    const sampleAudioCache = sampleAudioCacheRef.current;
+    const sampleAudioLoading = sampleAudioLoadingRef.current;
+
     return () => {
-      if (releaseTimerRef.current) window.clearTimeout(releaseTimerRef.current);
+      clearRecordingLimitTimer();
+
+      if (releaseTimerRef.current) {
+        window.clearTimeout(releaseTimerRef.current);
+      }
+
+      if (templateMovedToastTimerRef.current) {
+        window.clearTimeout(templateMovedToastTimerRef.current);
+      }
+
       processorRef.current?.disconnect();
       sourceRef.current?.disconnect();
       recordingStreamRef.current?.getTracks().forEach((t) => t.stop());
-      if (audioContextRef.current) void audioContextRef.current.close();
+
+      if (audioContextRef.current) {
+        void audioContextRef.current.close();
+      }
+
+      sampleAudioCache.forEach((cached) => {
+        URL.revokeObjectURL(cached.url);
+      });
+      sampleAudioCache.clear();
+      sampleAudioLoading.clear();
     };
   }, []);
 
@@ -237,9 +442,13 @@ export default function PronunciationPage() {
 
         setCategories(data);
 
-        if (data.length > 0) {
-          setSelectedCategoryId(data[0].id);
-        }
+        setSelectedCategoryId((currentId) => {
+          if (currentId && data.some((category) => category.id === currentId)) {
+            return currentId;
+          }
+
+          return data[0]?.id ?? null;
+        });
       } catch (error) {
         if (!ignore) {
           setErrorMessage(
@@ -255,10 +464,43 @@ export default function PronunciationPage() {
       }
     };
 
-    void loadCategories();
+    const unsubscribe = onAuthStateChanged(auth, () => {
+      void loadCategories();
+    });
 
     return () => {
       ignore = true;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        if (!ignore) {
+          setFavorites(new Set());
+        }
+        return;
+      }
+
+      try {
+        const favoriteIds = await fetchFavoriteTemplateIds();
+
+        if (ignore) {
+          return;
+        }
+
+        setFavorites(new Set(favoriteIds));
+      } catch (error) {
+        console.error(error);
+      }
+    });
+
+    return () => {
+      ignore = true;
+      unsubscribe();
     };
   }, []);
 
@@ -289,8 +531,11 @@ export default function PronunciationPage() {
   // ── when selected Category ─────────────────────────────────────────────
   useEffect(() => {
     if (!selectedCategoryId) {
+      pendingTemplateSelectRef.current = null;
       setTemplates([]);
       setSelectedTemplateId(null);
+      setReferenceText("Select a practice sentence to get started.");
+      resetSampleAudioState();
       return;
     }
 
@@ -309,13 +554,24 @@ export default function PronunciationPage() {
 
         setTemplates(data);
 
-        if (data.length > 0) {
-          const firstTemplate = data[0];
-          setSelectedTemplateId(firstTemplate.id);
-          setReferenceText(firstTemplate.displayText);
+        const pendingTemplateId = pendingTemplateSelectRef.current;
+        const pendingTemplate = pendingTemplateId
+          ? (data.find((template) => template.id === pendingTemplateId) ?? null)
+          : null;
+
+        pendingTemplateSelectRef.current = null;
+
+        const nextTemplate = pendingTemplate ?? data[0] ?? null;
+
+        if (nextTemplate) {
+          setSelectedTemplateId(nextTemplate.id);
+          setReferenceText(nextTemplate.displayText);
         } else {
           setSelectedTemplateId(null);
+          setReferenceText("Select a practice sentence to get started.");
         }
+
+        resetSampleAudioState();
       } catch (error) {
         if (!ignore) {
           setErrorMessage(
@@ -340,6 +596,11 @@ export default function PronunciationPage() {
 
   // ── Recording ─────────────────────────────────────────────
   const handleStartRecording = async () => {
+    if (!selectedTemplate) {
+      setErrorMessage("Please select a sentence first.");
+      return;
+    }
+
     if (!navigator.mediaDevices?.getUserMedia) {
       setErrorMessage("Microphone recording is not supported in this browser.");
       return;
@@ -389,6 +650,12 @@ export default function PronunciationPage() {
       });
       setIsMicReady(true);
       setIsRecording(true);
+
+      clearRecordingLimitTimer();
+      recordingLimitTimerRef.current = window.setTimeout(() => {
+        recordingLimitTimerRef.current = null;
+        handleStopRecording();
+      }, RECORDING_MAX_MS);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -461,7 +728,14 @@ export default function PronunciationPage() {
   };
 
   const handleStopRecording = () => {
-    if (!audioContextRef.current) return;
+    clearRecordingLimitTimer();
+
+    if (!audioContextRef.current || recordedChunksRef.current.length === 0) {
+      setIsRecording(false);
+      scheduleMicRelease();
+      return;
+    }
+
     const sr = audioContextRef.current.sampleRate;
     const merged = mergeAudioChunks(recordedChunksRef.current);
     const resampled = resampleAudio(merged, sr, TARGET_SAMPLE_RATE);
@@ -484,7 +758,11 @@ export default function PronunciationPage() {
 
   // ── TTS: generate then auto-play ──────────────────────────
   const handlePlaySample = async () => {
-    // If already generated, toggle play/pause
+    if (!selectedTemplate) {
+      setErrorMessage("Please select a sentence first.");
+      return;
+    }
+
     if (audioUrl && audioRef.current) {
       if (audioRef.current.paused) {
         void audioRef.current.play();
@@ -493,44 +771,42 @@ export default function PronunciationPage() {
       }
       return;
     }
+
     if (!referenceText.trim()) {
       setErrorMessage("Please enter reference text.");
       return;
     }
+
     try {
       setTtsLoading(true);
       setErrorMessage("");
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      if (!selectedTemplate) {
-        setErrorMessage("Please select a sentence first.");
-        return;
-      }
 
-      const response = await generateTemplateSampleAudio(selectedTemplate.id);
+      const objectUrl = await getOrCreateSampleAudioUrl(selectedTemplate);
 
-      setAudioUrl((previousUrl) => {
-        if (previousUrl?.startsWith("blob:")) {
-          URL.revokeObjectURL(previousUrl);
-        }
-
-        return response.audioUrl;
-      });
+      pendingSampleAudioAutoPlayRef.current = true;
+      setAudioUrl(objectUrl);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to generate sample audio.",
+        error instanceof Error ? error.message : "Failed to load sample audio.",
       );
     } finally {
       setTtsLoading(false);
     }
   };
 
-  // Auto-play when audioUrl is set
   useEffect(() => {
-    if (audioUrl && audioRef.current) {
-      void audioRef.current.play();
+    if (!audioUrl || !audioRef.current) {
+      return;
     }
+
+    audioRef.current.load();
+
+    if (!pendingSampleAudioAutoPlayRef.current) {
+      return;
+    }
+
+    pendingSampleAudioAutoPlayRef.current = false;
+    void audioRef.current.play();
   }, [audioUrl]);
 
   // ── Scoring ───────────────────────────────────────────────
@@ -581,19 +857,304 @@ export default function PronunciationPage() {
   const selectTemplate = (template: SentenceTemplate) => {
     setSelectedTemplateId(template.id);
     setReferenceText(template.displayText);
-    setResult(null);
-    setAudioFile(null);
-    setAudioUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setRecordedAudioUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
+    resetSampleAudioState();
     setSheetOpen(false);
+  };
+
+  const toggleFavorite = async (templateId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    const wasFavorite = favorites.has(templateId);
+
+    setFavorites((prev) => {
+      const next = new Set(prev);
+
+      if (wasFavorite) {
+        next.delete(templateId);
+      } else {
+        next.add(templateId);
+      }
+
+      return next;
+    });
+
+    try {
+      if (wasFavorite) {
+        await removeTemplateFavorite(templateId);
+      } else {
+        await addTemplateFavorite(templateId);
+      }
+    } catch (error) {
+      setFavorites((prev) => {
+        const next = new Set(prev);
+
+        if (wasFavorite) {
+          next.add(templateId);
+        } else {
+          next.delete(templateId);
+        }
+
+        return next;
+      });
+
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to update favorite.",
+      );
+    }
+  };
+
+  // ── Category CRUD helpers ─────────────────────────────────
+  const openNewCategoryForm = (isMobile: boolean) => {
+    setEditingCategoryId(null);
+    setCategoryFormName("");
+    setCategoryFormDesc("");
+    if (isMobile) {
+      setSheetView("category-form");
+    } else {
+      setSidebarView("category-form");
+    }
+  };
+
+  const openEditCategoryForm = (cat: SentenceCategory, isMobile: boolean) => {
+    setEditingCategoryId(cat.id);
+    setCategoryFormName(cat.displayName);
+    setCategoryFormDesc(cat.description ?? "");
+    if (isMobile) {
+      setSheetView("category-form");
+    } else {
+      setSidebarView("category-form");
+    }
+  };
+
+  const handleSaveCategory = async () => {
+    const name = categoryFormName.trim();
+
+    if (!name) {
+      return;
+    }
+
+    const request = {
+      displayName: name,
+      description: categoryFormDesc.trim() || null,
+    };
+
+    try {
+      setErrorMessage("");
+
+      const isEditing = Boolean(editingCategoryId);
+
+      const savedCategory = editingCategoryId
+        ? await updateSentenceCategory(editingCategoryId, request)
+        : await createSentenceCategory(request);
+
+      const fetchedCategories = await fetchSentenceCategories();
+      const nextCategories = upsertCategory(fetchedCategories, savedCategory);
+
+      setCategories(nextCategories);
+
+      if (isEditing) {
+        setSelectedCategoryId((currentId) => currentId ?? savedCategory.id);
+      } else {
+        setSelectedCategoryId(savedCategory.id);
+        setTemplates([]);
+        setSelectedTemplateId(null);
+        setReferenceText("Select a practice sentence to get started.");
+      }
+
+      setSidebarView("categories");
+      setSheetView("categories");
+      setEditingCategoryId(null);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to save category.",
+      );
+    }
+  };
+
+  const handleDeleteCategory = async (catId: string) => {
+    const ok = window.confirm(
+      "Delete this category?\n\nAll practice sentences in this category will also be deleted.\nThis action cannot be undone.",
+    );
+
+    if (!ok) {
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+
+      await deleteSentenceCategory(catId);
+
+      const nextCategories = await fetchSentenceCategories();
+      setCategories(nextCategories);
+
+      if (selectedCategoryId === catId) {
+        const nextCategoryId = nextCategories[0]?.id ?? null;
+        setSelectedCategoryId(nextCategoryId);
+
+        if (!nextCategoryId) {
+          setTemplates([]);
+          setSelectedTemplateId(null);
+          setReferenceText("");
+        }
+      }
+
+      setSidebarView("categories");
+      setSheetView("categories");
+      setEditingCategoryId(null);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to delete category.",
+      );
+    }
+  };
+
+  // ── Template CRUD helpers ─────────────────────────────────
+  const openNewTemplateForm = (isMobile: boolean) => {
+    setEditingTemplateId(null);
+    setTemplateFormCategoryId(selectedCategoryId);
+    setTemplateFormTitle("");
+    setTemplateFormText("");
+    setTemplateFormDifficulty("");
+    if (isMobile) {
+      setSheetView("phrase-form");
+    } else {
+      setSidebarView("phrase-form");
+    }
+  };
+
+  const openEditTemplateForm = (
+    template: SentenceTemplate,
+    isMobile: boolean,
+  ) => {
+    setEditingTemplateId(template.id);
+    setTemplateFormCategoryId(template.categoryId);
+    setTemplateFormTitle(template.title ?? "");
+    setTemplateFormText(template.displayText);
+    setTemplateFormDifficulty(
+      (template.difficulty?.toLowerCase() as "easy" | "medium" | "hard") ?? "",
+    );
+    if (isMobile) {
+      setSheetView("phrase-form");
+    } else {
+      setSidebarView("phrase-form");
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    const text = templateFormText.trim();
+
+    if (!text) {
+      return;
+    }
+
+    const destCategoryId = templateFormCategoryId ?? selectedCategoryId;
+
+    if (!destCategoryId) {
+      setErrorMessage("Please select a category.");
+      return;
+    }
+
+    const title = templateFormTitle.trim();
+    const difficulty = templateFormDifficulty || "easy";
+
+    const request = {
+      categoryId: destCategoryId,
+      title,
+      displayText: text,
+      scoringText: text,
+      sampleAudioText: text,
+      difficulty,
+    };
+
+    try {
+      setErrorMessage("");
+
+      const savedTemplate = editingTemplateId
+        ? await updateSentenceTemplate(editingTemplateId, request)
+        : await createSentenceTemplate(request);
+
+      if (editingTemplateId) {
+        removeCachedSampleAudioForTemplate(
+          sampleAudioCacheRef.current,
+          editingTemplateId,
+        );
+      }
+
+      const movedToAnotherCategory = selectedCategoryId !== destCategoryId;
+
+      if (movedToAnotherCategory) {
+        pendingTemplateSelectRef.current = savedTemplate.id;
+        setSelectedCategoryId(destCategoryId);
+        resetSampleAudioState();
+        showTemplateMovedToast("Practice sentence moved to another category.");
+      } else {
+        const nextTemplates = await fetchSentenceTemplates(destCategoryId);
+        setTemplates(nextTemplates);
+
+        const nextSavedTemplate =
+          nextTemplates.find((template) => template.id === savedTemplate.id) ??
+          savedTemplate;
+
+        if (!editingTemplateId || selectedTemplateId === editingTemplateId) {
+          setSelectedTemplateId(nextSavedTemplate.id);
+          setReferenceText(nextSavedTemplate.displayText);
+          resetSampleAudioState();
+        }
+      }
+
+      setSidebarView("phrases");
+      setSheetView("phrases");
+      setEditingTemplateId(null);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to save practice sentence.",
+      );
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    const ok = window.confirm(
+      "Delete this practice sentence?\n\nThe sample audio file for this sentence will also be deleted.\nYour past practice history will remain.",
+    );
+
+    if (!ok) {
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+
+      await deleteSentenceTemplate(templateId);
+
+      removeCachedSampleAudioForTemplate(
+        sampleAudioCacheRef.current,
+        templateId,
+      );
+
+      if (selectedCategoryId) {
+        const nextTemplates = await fetchSentenceTemplates(selectedCategoryId);
+        setTemplates(nextTemplates);
+
+        if (selectedTemplateId === templateId) {
+          const nextTemplate = nextTemplates[0] ?? null;
+          setSelectedTemplateId(nextTemplate?.id ?? null);
+          setReferenceText(nextTemplate?.displayText ?? "");
+        }
+      }
+
+      setSidebarView("phrases");
+      setSheetView("phrases");
+      setEditingTemplateId(null);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to delete practice sentence.",
+      );
+    }
   };
 
   // ── Derived ───────────────────────────────────────────────
@@ -602,6 +1163,52 @@ export default function PronunciationPage() {
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
   const selectedTemplate =
     templates.find((template) => template.id === selectedTemplateId) ?? null;
+  const hasSelectedTemplate = selectedTemplate !== null;
+  const filteredTemplates = favoritesOnly
+    ? templates.filter((t) => favorites.has(t.id))
+    : templates;
+
+  useEffect(() => {
+    if (!selectedTemplate) {
+      return;
+    }
+
+    let ignore = false;
+
+    const preloadSampleAudio = async () => {
+      try {
+        setTtsLoading(true);
+        setErrorMessage("");
+
+        const objectUrl = await getOrCreateSampleAudioUrl(selectedTemplate);
+
+        if (ignore) {
+          return;
+        }
+
+        pendingSampleAudioAutoPlayRef.current = false;
+        setAudioUrl(objectUrl);
+      } catch (error) {
+        if (!ignore) {
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Failed to prepare sample audio.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setTtsLoading(false);
+        }
+      }
+    };
+
+    void preloadSampleAudio();
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedTemplate, getOrCreateSampleAudioUrl]);
 
   // ── Time formatter ────────────────────────────────────────
   const formatTime = (sec: number) => {
@@ -627,7 +1234,16 @@ export default function PronunciationPage() {
             {/* ── Category view ── */}
             {sidebarView === "categories" && (
               <div className="p-5">
-                <SectionLabel>Category</SectionLabel>
+                <div className="flex items-center justify-between mb-3">
+                  <SectionLabel>Category</SectionLabel>
+                  <button
+                    type="button"
+                    onClick={() => openNewCategoryForm(false)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-purple-500 bg-purple-50 hover:bg-purple-100 transition"
+                  >
+                    + New
+                  </button>
+                </div>
                 {categoryLoading ? (
                   <p className="text-xs text-gray-400 py-4 text-center">
                     Loading…
@@ -635,32 +1251,44 @@ export default function PronunciationPage() {
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     {categories.map((cat) => (
-                      <button
+                      <div
                         key={cat.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedCategoryId(cat.id);
-                          setSidebarView("phrases");
-                        }}
-                        className="group flex w-full items-center gap-3 rounded-xl border-2 border-transparent px-3 py-2.5 text-left transition hover:border-purple-100 hover:bg-purple-50"
+                        className="group flex w-full items-center gap-3 rounded-xl border-2 border-transparent px-3 py-2.5 transition hover:border-purple-100 hover:bg-purple-50"
                       >
-                        <span className="text-xl w-7 text-center shrink-0">
-                          {getCategoryIcon(cat.categoryKey)}
-                        </span>
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-sm font-bold text-gray-700 truncate">
-                            {cat.displayName}
+                        <button
+                          type="button"
+                          className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                          onClick={() => {
+                            setSelectedCategoryId(cat.id);
+                            setSidebarView("phrases");
+                          }}
+                        >
+                          <span className="text-xl w-7 text-center shrink-0">
+                            {getCategoryIcon(cat.categoryKey)}
                           </span>
-                          {cat.description && (
-                            <span className="block text-[11px] text-gray-400 truncate">
-                              {cat.description}
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-bold text-gray-700 truncate">
+                              {cat.displayName}
                             </span>
-                          )}
-                        </span>
-                        <span className="text-purple-300 text-base transition group-hover:translate-x-0.5 group-hover:text-purple-400">
+                            {cat.description && (
+                              <span className="block text-[11px] text-gray-400 truncate">
+                                {cat.description}
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Edit ${cat.displayName}`}
+                          onClick={() => openEditCategoryForm(cat, false)}
+                          className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs shrink-0"
+                        >
+                          ✎
+                        </button>
+                        <span className="text-purple-300 text-base transition group-hover:translate-x-0.5 group-hover:text-purple-400 shrink-0">
                           ›
                         </span>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -671,7 +1299,7 @@ export default function PronunciationPage() {
             {sidebarView === "phrases" && (
               <div className="p-5">
                 {/* Header */}
-                <div className="flex items-center gap-2 mb-4">
+                <div className="flex items-center gap-2 mb-3">
                   <button
                     onClick={() => setSidebarView("categories")}
                     className="w-7 h-7 rounded-full bg-gray-100 hover:bg-purple-50 flex items-center justify-center text-gray-400 hover:text-purple-400 transition text-xs shrink-0"
@@ -686,29 +1314,46 @@ export default function PronunciationPage() {
                   <span className="text-sm font-bold text-gray-700 flex-1 truncate">
                     {selectedCategory?.displayName ?? "Templates"}
                   </span>
-                  <span className="text-[11px] text-gray-400 shrink-0">
-                    {templates.length}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => openNewTemplateForm(false)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-purple-500 bg-purple-50 hover:bg-purple-100 transition shrink-0"
+                  >
+                    + New
+                  </button>
                 </div>
+
+                {/* Fav filter toggle */}
+                <button
+                  onClick={() => setFavoritesOnly((v) => !v)}
+                  className={`mb-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${
+                    favoritesOnly
+                      ? "bg-amber-50 border-amber-300 text-amber-600"
+                      : "bg-gray-50 border-gray-200 text-gray-400 hover:border-purple-200 hover:text-purple-400"
+                  }`}
+                >
+                  {favoritesOnly ? "★" : "☆"} Favorites only
+                </button>
 
                 {/* Phrase list */}
                 {templateLoading ? (
                   <p className="py-6 text-center text-xs text-gray-400">
                     Loading…
                   </p>
-                ) : templates.length === 0 ? (
+                ) : filteredTemplates.length === 0 ? (
                   <p className="py-6 text-center text-xs text-gray-400">
-                    No templates yet.
+                    {favoritesOnly ? "No favorites yet." : "No templates yet."}
                   </p>
                 ) : (
                   <div className="flex flex-col gap-2">
-                    {templates.map((template) => {
+                    {filteredTemplates.map((template) => {
                       const isSelected = selectedTemplateId === template.id;
+                      const isFav = favorites.has(template.id);
                       const diff = template.difficulty?.toLowerCase() ?? "";
                       const diffBadge =
                         diff === "easy"
                           ? "bg-emerald-50 text-emerald-700"
-                          : diff === "medium" || diff === "med"
+                          : diff === "medium"
                             ? "bg-amber-50 text-amber-600"
                             : diff === "hard"
                               ? "bg-red-50 text-red-600"
@@ -726,66 +1371,268 @@ export default function PronunciationPage() {
                               : "bg-red-400";
 
                       return (
-                        <button
+                        <div
                           key={template.id}
-                          type="button"
-                          onClick={() => selectTemplate(template)}
-                          className={`w-full text-left px-3 py-3 rounded-xl border-2 transition ${
+                          className={`group relative w-full rounded-xl border-2 transition ${
                             isSelected
                               ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50 shadow-sm"
                               : "border-gray-100 bg-gray-50 hover:bg-purple-50 hover:border-purple-200"
                           }`}
                         >
-                          {/* Badge + title row */}
-                          <div className="flex items-center gap-2 mb-1.5">
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${diffBadge}`}
-                            >
-                              {diffLabel}
-                            </span>
-                            {template.title && (
-                              <span className="text-[10px] font-bold text-purple-400 truncate">
-                                {template.title}
-                              </span>
-                            )}
-                            {isSelected && (
-                              <span className="ml-auto text-purple-400 text-xs shrink-0">
-                                ✓
-                              </span>
-                            )}
-                          </div>
-                          {/* Phrase text */}
-                          <p className="text-[13px] font-semibold text-gray-700 leading-snug">
-                            {template.displayText}
-                          </p>
-                          {/* Score row */}
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
-                            />
-                            {lastScore == null ? (
-                              <span className="text-[11px] font-bold text-gray-400">
-                                Not tried yet
-                              </span>
-                            ) : (
+                          <button
+                            type="button"
+                            onClick={() => selectTemplate(template)}
+                            className="w-full text-left px-3 py-3 pr-14"
+                          >
+                            {/* Badge + title row */}
+                            <div className="flex items-center gap-2 mb-1.5">
                               <span
-                                className={`text-[11px] font-bold ${
-                                  lastScore >= 80
-                                    ? "text-emerald-600"
-                                    : lastScore >= 60
-                                      ? "text-amber-500"
-                                      : "text-red-500"
-                                }`}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${diffBadge}`}
                               >
-                                Last: {lastScore}
+                                {diffLabel}
                               </span>
-                            )}
-                          </div>
-                        </button>
+                              {template.title && (
+                                <span className="text-[10px] font-bold text-purple-400 truncate">
+                                  {template.title}
+                                </span>
+                              )}
+                            </div>
+                            {/* Phrase text */}
+                            <p className="text-[13px] font-semibold text-gray-700 leading-snug">
+                              {template.displayText}
+                            </p>
+                            {/* Score row */}
+                            <div className="flex items-center gap-1.5 mt-1.5">
+                              <span
+                                className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
+                              />
+                              {lastScore == null ? (
+                                <span className="text-[11px] font-bold text-gray-400">
+                                  Not tried yet
+                                </span>
+                              ) : (
+                                <span
+                                  className={`text-[11px] font-bold ${lastScore >= 80 ? "text-emerald-600" : lastScore >= 60 ? "text-amber-500" : "text-red-500"}`}
+                                >
+                                  Last: {lastScore}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                          {/* Star - always visible, outside select button */}
+                          <button
+                            type="button"
+                            onClick={(e) => toggleFavorite(template.id, e)}
+                            className={`absolute top-2.5 right-8 text-sm transition hover:scale-125 ${isFav ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
+                          >
+                            {isFav ? "★" : "☆"}
+                          </button>
+                          {/* Edit - visible on hover */}
+                          <button
+                            type="button"
+                            aria-label="Edit phrase"
+                            onClick={() =>
+                              openEditTemplateForm(template, false)
+                            }
+                            className="absolute top-2 right-1 opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs"
+                          >
+                            ✎
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
                 )}
+              </div>
+            )}
+            {/* ── Phrase form view ── */}
+            {sidebarView === "phrase-form" && (
+              <div className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <button
+                    onClick={() => setSidebarView("phrases")}
+                    className="w-7 h-7 rounded-full bg-gray-100 hover:bg-purple-50 flex items-center justify-center text-gray-400 hover:text-purple-400 transition text-xs shrink-0"
+                  >
+                    ←
+                  </button>
+                  <span className="text-sm font-bold text-gray-700">
+                    {editingTemplateId ? "Edit phrase" : "New phrase"}
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  {/* Category chips */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wide">
+                      Category
+                    </label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {categories.map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setTemplateFormCategoryId(cat.id)}
+                          className={`rounded-xl border-2 px-3 py-2 text-left text-sm font-bold transition ${
+                            templateFormCategoryId === cat.id
+                              ? "border-purple-300 bg-purple-50 text-purple-700"
+                              : "border-gray-100 bg-gray-50 text-gray-500 hover:border-purple-200"
+                          }`}
+                        >
+                          {getCategoryIcon(cat.categoryKey)} {cat.displayName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Title */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Title
+                    </label>
+                    <input
+                      type="text"
+                      value={templateFormTitle}
+                      onChange={(e) => setTemplateFormTitle(e.target.value)}
+                      placeholder="e.g. Why Australia"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
+                    />
+                  </div>
+
+                  {/* Phrase text */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Phrase text
+                    </label>
+                    <textarea
+                      value={templateFormText}
+                      onChange={(e) => setTemplateFormText(e.target.value)}
+                      placeholder="e.g. I've always wanted to..."
+                      rows={3}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition resize-none"
+                    />
+                  </div>
+
+                  {/* Difficulty chips */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wide">
+                      Difficulty
+                    </label>
+                    <div className="flex gap-2">
+                      {(["easy", "medium", "hard"] as const).map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() =>
+                            setTemplateFormDifficulty(
+                              templateFormDifficulty === d ? "" : d,
+                            )
+                          }
+                          className={`rounded-xl border-2 px-3 py-1.5 text-sm font-bold transition ${
+                            templateFormDifficulty === d
+                              ? d === "easy"
+                                ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                                : d === "medium"
+                                  ? "border-amber-300 bg-amber-50 text-amber-700"
+                                  : "border-red-300 bg-red-50 text-red-700"
+                              : "border-gray-100 bg-gray-50 text-gray-500 hover:border-purple-200"
+                          }`}
+                        >
+                          {d.charAt(0).toUpperCase() + d.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setSidebarView("phrases")}
+                      className="flex-1 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 text-sm font-bold py-2 transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveTemplate}
+                      disabled={!templateFormText.trim()}
+                      className="flex-2 rounded-xl bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-white text-sm font-bold py-2 transition"
+                    >
+                      Save
+                    </button>
+                  </div>
+
+                  {editingTemplateId && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTemplate(editingTemplateId)}
+                      className="w-full rounded-xl border border-red-200 text-red-400 hover:bg-red-50 text-sm font-bold py-2 transition"
+                    >
+                      Delete phrase
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* ── Category form view ── */}
+            {sidebarView === "category-form" && (
+              <div className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <button
+                    onClick={() => setSidebarView("categories")}
+                    className="w-7 h-7 rounded-full bg-gray-100 hover:bg-purple-50 flex items-center justify-center text-gray-400 hover:text-purple-400 transition text-xs shrink-0"
+                  >
+                    ←
+                  </button>
+                  <span className="text-sm font-bold text-gray-700">
+                    {editingCategoryId ? "Edit category" : "New category"}
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Name
+                    </label>
+                    <input
+                      type="text"
+                      value={categoryFormName}
+                      onChange={(e) => setCategoryFormName(e.target.value)}
+                      placeholder="e.g. Business"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Description (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={categoryFormDesc}
+                      onChange={(e) => setCategoryFormDesc(e.target.value)}
+                      placeholder="Short description"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveCategory}
+                    disabled={!categoryFormName.trim()}
+                    className="w-full rounded-xl bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-white text-sm font-bold py-2.5 transition"
+                  >
+                    {editingCategoryId ? "Save changes" : "Create category"}
+                  </button>
+
+                  {editingCategoryId && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCategory(editingCategoryId)}
+                      className="w-full rounded-xl border border-red-200 text-red-400 hover:bg-red-50 text-sm font-bold py-2 transition"
+                    >
+                      Delete category
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -803,6 +1650,7 @@ export default function PronunciationPage() {
                 type="button"
                 onClick={() => {
                   setSelectedCategoryId(cat.id);
+                  setSheetView("phrases");
                   setSheetOpen(true);
                 }}
                 className={`shrink-0 rounded-full border-2 px-4 py-2 text-sm font-bold transition ${
@@ -814,12 +1662,27 @@ export default function PronunciationPage() {
                 {getCategoryIcon(cat.categoryKey)} {cat.displayName}
               </button>
             ))}
+            <button
+              type="button"
+              aria-label="Manage categories"
+              onClick={() => {
+                setSheetView("categories");
+                setSheetOpen(true);
+              }}
+              className="shrink-0 rounded-full border-2 border-gray-100 bg-white text-gray-400 hover:border-purple-200 hover:text-purple-400 w-10 h-10 flex items-center justify-center transition text-base"
+            >
+              ⚙
+            </button>
           </div>
 
           {/* ── Phrase panel ── */}
           <Card>
             <SectionLabel>Practice Phrase</SectionLabel>
-            <p className="text-xl font-bold text-gray-800 leading-snug mb-4">
+            <p
+              className={`text-xl font-bold leading-snug mb-4 ${
+                hasSelectedTemplate ? "text-gray-800" : "text-gray-400"
+              }`}
+            >
               {referenceText}
             </p>
 
@@ -844,93 +1707,102 @@ export default function PronunciationPage() {
 
             <div className="flex flex-wrap items-center gap-3">
               {/* Play sample pill — morphs into inline player after generation */}
-              {!audioUrl ? (
-                <button
-                  onClick={handlePlaySample}
-                  disabled={ttsLoading}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold text-purple-700 bg-linear-to-r from-blue-100 to-purple-100 hover:scale-105 transition disabled:opacity-50"
-                >
-                  <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0">
-                    {ttsLoading ? (
-                      <svg
-                        className="animate-spin w-3 h-3 text-purple-400"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
+              {hasSelectedTemplate && (
+                <>
+                  {!audioUrl ? (
+                    <button
+                      onClick={handlePlaySample}
+                      disabled={ttsLoading}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold text-purple-700 bg-linear-to-r from-blue-100 to-purple-100 hover:scale-105 transition disabled:opacity-50"
+                    >
+                      <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0">
+                        {ttsLoading ? (
+                          <svg
+                            className="animate-spin w-3 h-3 text-purple-400"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                          >
+                            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                          </svg>
+                        ) : (
+                          <svg
+                            width="8"
+                            height="9"
+                            viewBox="0 0 8 9"
+                            fill="#a78bfa"
+                          >
+                            <polygon points="0,0 8,4.5 0,9" />
+                          </svg>
+                        )}
+                      </div>
+                      {ttsLoading ? "Generating…" : "Play sample · Roger"}
+                    </button>
+                  ) : (
+                    /* ── Inline mini-player pill ── */
+                    <div className="inline-flex items-center gap-2 pl-2 pr-4 py-2 rounded-full bg-linear-to-r from-blue-100 to-purple-100">
+                      {/* Play / Pause button */}
+                      <button
+                        onClick={handlePlaySample}
+                        className="w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0 hover:scale-110 transition"
                       >
-                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                      </svg>
-                    ) : (
-                      <svg
-                        width="8"
-                        height="9"
-                        viewBox="0 0 8 9"
-                        fill="#a78bfa"
-                      >
-                        <polygon points="0,0 8,4.5 0,9" />
-                      </svg>
-                    )}
-                  </div>
-                  {ttsLoading ? "Generating…" : "Play sample · Roger"}
-                </button>
-              ) : (
-                /* ── Inline mini-player pill ── */
-                <div className="inline-flex items-center gap-2 pl-2 pr-4 py-2 rounded-full bg-linear-to-r from-blue-100 to-purple-100">
-                  {/* Play / Pause button */}
-                  <button
-                    onClick={handlePlaySample}
-                    className="w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0 hover:scale-110 transition"
-                  >
-                    {isPlaying ? (
-                      /* Pause icon */
-                      <svg
-                        width="9"
-                        height="10"
-                        viewBox="0 0 9 10"
-                        fill="#a78bfa"
-                      >
-                        <rect x="0" y="0" width="3" height="10" rx="1" />
-                        <rect x="5.5" y="0" width="3" height="10" rx="1" />
-                      </svg>
-                    ) : (
-                      /* Play icon */
-                      <svg
-                        width="8"
-                        height="9"
-                        viewBox="0 0 8 9"
-                        fill="#a78bfa"
-                      >
-                        <polygon points="0,0 8,4.5 0,9" />
-                      </svg>
-                    )}
-                  </button>
+                        {isPlaying ? (
+                          /* Pause icon */
+                          <svg
+                            width="9"
+                            height="10"
+                            viewBox="0 0 9 10"
+                            fill="#a78bfa"
+                          >
+                            <rect x="0" y="0" width="3" height="10" rx="1" />
+                            <rect x="5.5" y="0" width="3" height="10" rx="1" />
+                          </svg>
+                        ) : (
+                          /* Play icon */
+                          <svg
+                            width="8"
+                            height="9"
+                            viewBox="0 0 8 9"
+                            fill="#a78bfa"
+                          >
+                            <polygon points="0,0 8,4.5 0,9" />
+                          </svg>
+                        )}
+                      </button>
 
-                  {/* Seekbar + time */}
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="range"
-                      min={0}
-                      max={duration || 1}
-                      step={0.01}
-                      value={currentTime}
-                      onChange={(e) => {
-                        const t = Number(e.target.value);
-                        setCurrentTime(t);
-                        if (audioRef.current) audioRef.current.currentTime = t;
-                      }}
-                      className="w-24 h-1 accent-violet-400 cursor-pointer"
-                    />
-                    <span className="text-[10px] font-mono text-purple-500 w-8 text-right tabular-nums">
-                      {formatTime(currentTime)}
-                    </span>
-                  </div>
+                      {/* Seekbar + time */}
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="range"
+                          min={0}
+                          max={duration || 1}
+                          step={0.01}
+                          value={currentTime}
+                          onChange={(e) => {
+                            const t = Number(e.target.value);
+                            setCurrentTime(t);
 
-                  {/* Voice label */}
-                  <span className="text-[11px] font-bold text-purple-400">
-                    Roger
-                  </span>
-                </div>
+                            const audio = audioRef.current;
+                            if (!audio) return;
+
+                            audio.currentTime = t;
+                            void audio.play();
+                          }}
+                          className="w-24 h-1 accent-violet-400 cursor-pointer"
+                        />
+                        <span className="text-[10px] font-mono text-purple-500 w-8 text-right tabular-nums">
+                          {formatTime(currentTime)}
+                        </span>
+                      </div>
+
+                      {/* Voice label */}
+                      <span className="text-[11px] font-bold text-purple-400">
+                        Roger
+                      </span>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Mobile: change phrase */}
@@ -944,175 +1816,187 @@ export default function PronunciationPage() {
           </Card>
 
           {/* ── Record panel ── */}
-          <Card>
-            {/* Header row: label + mic status */}
-            <div className="flex items-center gap-3 mb-3">
-              <p className="text-[10px] font-bold tracking-widest uppercase text-purple-300">
-                Record
-              </p>
-              {isMicReady && !isRecording && (
-                <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                    Mic ready
+          {hasSelectedTemplate && (
+            <Card>
+              {/* Header row: label + mic status */}
+              <div className="flex items-center gap-3 mb-3">
+                <p className="text-[10px] font-bold tracking-widest uppercase text-purple-300">
+                  Record
+                </p>
+                {isMicReady && !isRecording && (
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                      Mic ready
+                    </span>
+                    <button
+                      onClick={releaseMicrophone}
+                      className="text-[11px] text-gray-400 border border-gray-200 rounded-md px-2 py-0.5 hover:text-gray-600 hover:border-gray-300 transition"
+                    >
+                      Turn off
+                    </button>
+                  </div>
+                )}
+                {isRecording && (
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-red-500 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                    Recording…
                   </span>
-                  <button
-                    onClick={releaseMicrophone}
-                    className="text-[11px] text-gray-400 border border-gray-200 rounded-md px-2 py-0.5 hover:text-gray-600 hover:border-gray-300 transition"
-                  >
-                    Turn off
-                  </button>
-                </div>
-              )}
-              {isRecording && (
-                <span className="flex items-center gap-1.5 text-[11px] font-semibold text-red-500 animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
-                  Recording…
-                </span>
-              )}
-            </div>
+                )}
+              </div>
 
-            {/* Hidden audio element for recorded voice playback */}
-            <audio
-              ref={myVoiceRef}
-              src={recordedAudioUrl ?? undefined}
-              className="hidden"
-              onPlay={() => setIsMyVoicePlaying(true)}
-              onPause={() => setIsMyVoicePlaying(false)}
-              onEnded={() => {
-                setIsMyVoicePlaying(false);
-                setMyVoiceCurrentTime(0);
-              }}
-              onTimeUpdate={() =>
-                setMyVoiceCurrentTime(myVoiceRef.current?.currentTime ?? 0)
-              }
-              onLoadedMetadata={() =>
-                setMyVoiceDuration(myVoiceRef.current?.duration ?? 0)
-              }
-            />
+              <div className="mb-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2">
+                <p className="mt-0.5 text-[10px] text-amber-600">
+                  Recording auto-stops at 35 sec.
+                </p>
+              </div>
 
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Record / Stop toggle */}
-              <button
-                onClick={
-                  isRecording ? handleStopRecording : handleStartRecording
+              {/* Hidden audio element for recorded voice playback */}
+              <audio
+                ref={myVoiceRef}
+                src={recordedAudioUrl ?? undefined}
+                className="hidden"
+                onPlay={() => setIsMyVoicePlaying(true)}
+                onPause={() => setIsMyVoicePlaying(false)}
+                onEnded={() => {
+                  setIsMyVoicePlaying(false);
+                  setMyVoiceCurrentTime(0);
+                }}
+                onTimeUpdate={() =>
+                  setMyVoiceCurrentTime(myVoiceRef.current?.currentTime ?? 0)
                 }
-                disabled={loading}
-                className={`flex items-center gap-2.5 px-5 py-3 rounded-xl text-sm font-bold text-white transition hover:scale-105 disabled:opacity-50 ${
-                  isRecording
-                    ? "bg-linear-to-r from-red-400 to-red-500"
-                    : "bg-linear-to-r from-pink-300 to-violet-400"
-                }`}
-              >
-                {isRecording ? (
-                  <>
-                    <span className="w-3.5 h-3.5 rounded-sm bg-white opacity-90 shrink-0" />
-                    Stop
-                  </>
-                ) : (
-                  <>
-                    <span className="w-3.5 h-3.5 rounded-full bg-white opacity-90 shrink-0 ring-2 ring-white/40" />
-                    Record
-                  </>
-                )}
-              </button>
+                onLoadedMetadata={() =>
+                  setMyVoiceDuration(myVoiceRef.current?.duration ?? 0)
+                }
+              />
 
-              {/* Score button */}
-              <button
-                onClick={handleSubmit}
-                disabled={loading || isRecording || !audioFile || scored}
-                className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold text-white bg-linear-to-r from-violet-400 to-indigo-400 hover:scale-105 transition disabled:opacity-40"
-              >
-                {loading ? (
-                  <svg
-                    className="animate-spin w-3.5 h-3.5"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                  </svg>
-                ) : (
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <polygon points="5 3 19 12 5 21 5 3" />
-                  </svg>
-                )}
-                {loading ? "Scoring…" : "Score"}
-              </button>
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Record / Stop toggle */}
+                <button
+                  onClick={
+                    isRecording ? handleStopRecording : handleStartRecording
+                  }
+                  disabled={loading}
+                  className={`flex items-center gap-2.5 px-5 py-3 rounded-xl text-sm font-bold text-white transition hover:scale-105 disabled:opacity-50 ${
+                    isRecording
+                      ? "bg-linear-to-r from-red-400 to-red-500"
+                      : "bg-linear-to-r from-pink-300 to-violet-400"
+                  }`}
+                >
+                  {isRecording ? (
+                    <>
+                      <span className="w-3.5 h-3.5 rounded-sm bg-white opacity-90 shrink-0" />
+                      Stop
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-3.5 h-3.5 rounded-full bg-white opacity-90 shrink-0 ring-2 ring-white/40" />
+                      Record
+                    </>
+                  )}
+                </button>
 
-              {/* My voice mini-player — appears after recording */}
-              {recordedAudioUrl && (
-                <div className="inline-flex items-center gap-2 pl-2 pr-3 py-2 rounded-full bg-linear-to-r from-pink-100 to-rose-100">
-                  <button
-                    onClick={() => {
-                      if (!myVoiceRef.current) return;
-                      if (myVoiceRef.current.paused) {
-                        void myVoiceRef.current.play();
-                      } else {
-                        myVoiceRef.current.pause();
-                      }
-                    }}
-                    className="w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0 hover:scale-110 transition"
-                  >
-                    {isMyVoicePlaying ? (
-                      <svg
-                        width="9"
-                        height="10"
-                        viewBox="0 0 9 10"
-                        fill="#f472b6"
-                      >
-                        <rect x="0" y="0" width="3" height="10" rx="1" />
-                        <rect x="5.5" y="0" width="3" height="10" rx="1" />
-                      </svg>
-                    ) : (
-                      <svg
-                        width="8"
-                        height="9"
-                        viewBox="0 0 8 9"
-                        fill="#f472b6"
-                      >
-                        <polygon points="0,0 8,4.5 0,9" />
-                      </svg>
-                    )}
-                  </button>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="range"
-                      min={0}
-                      max={myVoiceDuration || 1}
-                      step={0.01}
-                      value={myVoiceCurrentTime}
-                      onChange={(e) => {
-                        const t = Number(e.target.value);
-                        setMyVoiceCurrentTime(t);
-                        if (myVoiceRef.current)
-                          myVoiceRef.current.currentTime = t;
+                {/* Score button */}
+                <button
+                  onClick={handleSubmit}
+                  disabled={loading || isRecording || !audioFile || scored}
+                  className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold text-white bg-linear-to-r from-violet-400 to-indigo-400 hover:scale-105 transition disabled:opacity-40"
+                >
+                  {loading ? (
+                    <svg
+                      className="animate-spin w-3.5 h-3.5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
+                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                    </svg>
+                  ) : (
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                  )}
+                  {loading ? "Scoring…" : "Score"}
+                </button>
+
+                {/* My voice mini-player — appears after recording */}
+                {recordedAudioUrl && (
+                  <div className="inline-flex items-center gap-2 pl-2 pr-3 py-2 rounded-full bg-linear-to-r from-pink-100 to-rose-100">
+                    <button
+                      onClick={() => {
+                        if (!myVoiceRef.current) return;
+                        if (myVoiceRef.current.paused) {
+                          void myVoiceRef.current.play();
+                        } else {
+                          myVoiceRef.current.pause();
+                        }
                       }}
-                      className="w-20 h-1 accent-pink-400 cursor-pointer"
-                    />
-                    <span className="text-[10px] font-mono text-pink-500 w-8 text-right tabular-nums">
-                      {formatTime(myVoiceCurrentTime)}
+                      className="w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0 hover:scale-110 transition"
+                    >
+                      {isMyVoicePlaying ? (
+                        <svg
+                          width="9"
+                          height="10"
+                          viewBox="0 0 9 10"
+                          fill="#f472b6"
+                        >
+                          <rect x="0" y="0" width="3" height="10" rx="1" />
+                          <rect x="5.5" y="0" width="3" height="10" rx="1" />
+                        </svg>
+                      ) : (
+                        <svg
+                          width="8"
+                          height="9"
+                          viewBox="0 0 8 9"
+                          fill="#f472b6"
+                        >
+                          <polygon points="0,0 8,4.5 0,9" />
+                        </svg>
+                      )}
+                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="range"
+                        min={0}
+                        max={myVoiceDuration || 1}
+                        step={0.01}
+                        value={myVoiceCurrentTime}
+                        onChange={(e) => {
+                          const t = Number(e.target.value);
+                          setMyVoiceCurrentTime(t);
+
+                          const audio = myVoiceRef.current;
+                          if (!audio) return;
+
+                          audio.currentTime = t;
+                          void audio.play();
+                        }}
+                        className="w-20 h-1 accent-pink-400 cursor-pointer"
+                      />
+                      <span className="text-[10px] font-mono text-pink-500 w-8 text-right tabular-nums">
+                        {formatTime(myVoiceCurrentTime)}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-bold text-pink-400">
+                      You
                     </span>
                   </div>
-                  <span className="text-[11px] font-bold text-pink-400">
-                    You
-                  </span>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            {errorMessage && (
-              <p className="mt-3 rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-xs text-red-600">
-                {errorMessage}
-              </p>
-            )}
-          </Card>
+              {errorMessage && (
+                <p className="mt-3 rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-xs text-red-600">
+                  {errorMessage}
+                </p>
+              )}
+            </Card>
+          )}
 
           {/* ── Warning banners ── */}
           {result && result.recognitionStatus !== "Success" && (
@@ -1298,114 +2182,407 @@ export default function PronunciationPage() {
         >
           <div className="w-full bg-white rounded-t-3xl max-h-[80vh] overflow-y-auto">
             <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-4" />
-            <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-100">
-              <div>
-                <p className="text-base font-black text-gray-800">
-                  {selectedCategory
-                    ? `${getCategoryIcon(selectedCategory.categoryKey)} ${selectedCategory.displayName}`
-                    : "Select a phrase"}
-                </p>
-                <p className="text-[11px] text-gray-400">No phrases yet</p>
-              </div>
-              <button
-                onClick={() => setSheetOpen(false)}
-                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 text-sm"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="px-5 py-4 flex flex-col gap-3 pb-8">
-              {/* Demo phrases always available */}
-              {templateLoading ? (
-                <p className="text-sm text-gray-400">Loading templates...</p>
-              ) : templates.length === 0 ? (
-                <p className="text-sm text-gray-400">No templates yet.</p>
-              ) : (
-                templates.map((template) => {
-                  const isSelected = selectedTemplateId === template.id;
-                  const diff = template.difficulty?.toLowerCase() ?? "";
-                  const diffBadge =
-                    diff === "easy"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : diff === "medium" || diff === "med"
-                        ? "bg-amber-50 text-amber-600"
-                        : diff === "hard"
-                          ? "bg-red-50 text-red-600"
-                          : "bg-gray-100 text-gray-500";
-                  const diffLabel =
-                    diff.charAt(0).toUpperCase() + diff.slice(1) || "—";
-                  const lastScore = templateLatestScores.get(template.id);
-                  const dotColor =
-                    lastScore == null
-                      ? "bg-gray-200"
-                      : lastScore >= 80
-                        ? "bg-emerald-400"
-                        : lastScore >= 60
-                          ? "bg-amber-400"
-                          : "bg-red-400";
 
-                  return (
+            {/* ── Sheet: phrases view ── */}
+            {sheetView === "phrases" && (
+              <>
+                <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-100">
+                  <div>
+                    <p className="text-base font-black text-gray-800">
+                      {selectedCategory
+                        ? `${getCategoryIcon(selectedCategory.categoryKey)} ${selectedCategory.displayName}`
+                        : "Select a phrase"}
+                    </p>
+                    <p className="text-[11px] text-gray-400">
+                      {filteredTemplates.length} phrase
+                      {filteredTemplates.length !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <button
-                      key={template.id}
                       type="button"
-                      onClick={() => selectTemplate(template)}
-                      className={`w-full rounded-2xl border-2 px-4 py-3.5 text-left transition ${
-                        isSelected
-                          ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50"
-                          : "border-gray-100 bg-gray-50 hover:border-purple-200 hover:bg-purple-50"
+                      onClick={() => openNewTemplateForm(true)}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold border border-purple-200 bg-purple-50 text-purple-500 transition"
+                    >
+                      + New
+                    </button>
+                    <button
+                      onClick={() => setFavoritesOnly((v) => !v)}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${
+                        favoritesOnly
+                          ? "bg-amber-50 border-amber-300 text-amber-600"
+                          : "bg-gray-50 border-gray-200 text-gray-400"
                       }`}
                     >
-                      {/* Badge + title row */}
-                      <div className="mb-1.5 flex items-center gap-2">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${diffBadge}`}
-                        >
-                          {diffLabel}
-                        </span>
-                        {template.title && (
-                          <span className="text-[10px] font-bold text-purple-400 truncate">
-                            {template.title}
-                          </span>
-                        )}
-                        {isSelected && (
-                          <span className="ml-auto text-purple-400 text-xs shrink-0">
-                            ✓
-                          </span>
-                        )}
-                      </div>
-                      {/* Phrase text */}
-                      <p className="text-sm font-semibold text-gray-700 leading-snug mb-2">
-                        {template.displayText}
-                      </p>
-                      {/* Score row */}
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
-                        />
-                        {lastScore == null ? (
-                          <span className="text-[11px] font-bold text-gray-400">
-                            Not tried yet
-                          </span>
-                        ) : (
-                          <span
-                            className={`text-[11px] font-bold ${
-                              lastScore >= 80
-                                ? "text-emerald-600"
-                                : lastScore >= 60
-                                  ? "text-amber-500"
-                                  : "text-red-500"
-                            }`}
-                          >
-                            Last: {lastScore}
-                          </span>
-                        )}
-                      </div>
+                      {favoritesOnly ? "★" : "☆"} Fav
                     </button>
-                  );
-                })
-              )}
-            </div>
+                    <button
+                      onClick={() => setSheetOpen(false)}
+                      className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 text-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <div className="px-5 py-4 flex flex-col gap-3 pb-8">
+                  {templateLoading ? (
+                    <p className="text-sm text-gray-400">
+                      Loading templates...
+                    </p>
+                  ) : filteredTemplates.length === 0 ? (
+                    <p className="text-sm text-gray-400">
+                      {favoritesOnly
+                        ? "No favorites yet."
+                        : "No templates yet."}
+                    </p>
+                  ) : (
+                    filteredTemplates.map((template) => {
+                      const isSelected = selectedTemplateId === template.id;
+                      const isFav = favorites.has(template.id);
+                      const diff = template.difficulty?.toLowerCase() ?? "";
+                      const diffBadge =
+                        diff === "easy"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : diff === "medium"
+                            ? "bg-amber-50 text-amber-600"
+                            : diff === "hard"
+                              ? "bg-red-50 text-red-600"
+                              : "bg-gray-100 text-gray-500";
+                      const diffLabel =
+                        diff.charAt(0).toUpperCase() + diff.slice(1) || "—";
+                      const lastScore = templateLatestScores.get(template.id);
+                      const dotColor =
+                        lastScore == null
+                          ? "bg-gray-200"
+                          : lastScore >= 80
+                            ? "bg-emerald-400"
+                            : lastScore >= 60
+                              ? "bg-amber-400"
+                              : "bg-red-400";
+
+                      return (
+                        <div
+                          key={template.id}
+                          className={`relative w-full rounded-2xl border-2 transition ${
+                            isSelected
+                              ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50"
+                              : "border-gray-100 bg-gray-50"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => selectTemplate(template)}
+                            className="w-full px-4 py-3.5 text-left pr-20"
+                          >
+                            <div className="mb-1.5 flex items-center gap-2">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${diffBadge}`}
+                              >
+                                {diffLabel}
+                              </span>
+                              {template.title && (
+                                <span className="text-[10px] font-bold text-purple-400 truncate">
+                                  {template.title}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm font-semibold text-gray-700 leading-snug mb-2">
+                              {template.displayText}
+                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
+                              />
+                              {lastScore == null ? (
+                                <span className="text-[11px] font-bold text-gray-400">
+                                  Not tried yet
+                                </span>
+                              ) : (
+                                <span
+                                  className={`text-[11px] font-bold ${lastScore >= 80 ? "text-emerald-600" : lastScore >= 60 ? "text-amber-500" : "text-red-500"}`}
+                                >
+                                  Last: {lastScore}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                          {/* Star - always visible, outside select button */}
+                          <button
+                            type="button"
+                            onClick={(e) => toggleFavorite(template.id, e)}
+                            className={`absolute top-3 right-10 text-sm transition hover:scale-125 ${isFav ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
+                          >
+                            {isFav ? "★" : "☆"}
+                          </button>
+                          {/* Edit button */}
+                          <button
+                            type="button"
+                            aria-label="Edit phrase"
+                            onClick={() => openEditTemplateForm(template, true)}
+                            className="absolute top-2.5 right-2.5 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs"
+                          >
+                            ✎
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* ── Sheet: categories view ── */}
+            {sheetView === "categories" && (
+              <>
+                <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-100">
+                  <p className="text-base font-black text-gray-800">
+                    Categories
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openNewCategoryForm(true)}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold border border-purple-200 bg-purple-50 text-purple-500 transition"
+                    >
+                      + New
+                    </button>
+                    <button
+                      onClick={() => setSheetOpen(false)}
+                      className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 text-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <div className="px-5 py-4 flex flex-col gap-2 pb-8">
+                  {categories.map((cat) => (
+                    <div
+                      key={cat.id}
+                      className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3"
+                    >
+                      <button
+                        type="button"
+                        className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                        onClick={() => {
+                          setSelectedCategoryId(cat.id);
+                          setSheetView("phrases");
+                        }}
+                      >
+                        <span className="text-xl w-6 text-center shrink-0">
+                          {getCategoryIcon(cat.categoryKey)}
+                        </span>
+                        <span className="text-sm font-bold text-gray-700 truncate flex-1">
+                          {cat.displayName}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Edit ${cat.displayName}`}
+                        onClick={() => openEditCategoryForm(cat, true)}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs shrink-0"
+                      >
+                        ✎
+                      </button>{" "}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* ── Sheet: phrase-form view ── */}
+            {sheetView === "phrase-form" && (
+              <>
+                <div className="flex items-center gap-3 px-5 pb-3 border-b border-gray-100">
+                  <button
+                    onClick={() => setSheetView("phrases")}
+                    className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs shrink-0"
+                  >
+                    ←
+                  </button>
+                  <p className="text-base font-black text-gray-800">
+                    {editingTemplateId ? "Edit phrase" : "New phrase"}
+                  </p>
+                </div>
+                <div className="px-5 py-4 flex flex-col gap-3 pb-8">
+                  {/* Category chips */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wide">
+                      Category
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {categories.map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setTemplateFormCategoryId(cat.id)}
+                          className={`rounded-xl border-2 px-3 py-2.5 text-left text-sm font-bold transition ${
+                            templateFormCategoryId === cat.id
+                              ? "border-purple-300 bg-purple-50 text-purple-700"
+                              : "border-gray-100 bg-gray-50 text-gray-500"
+                          }`}
+                        >
+                          {getCategoryIcon(cat.categoryKey)} {cat.displayName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Title */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Title
+                    </label>
+                    <input
+                      type="text"
+                      value={templateFormTitle}
+                      onChange={(e) => setTemplateFormTitle(e.target.value)}
+                      placeholder="e.g. Why Australia"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
+                    />
+                  </div>
+
+                  {/* Phrase text */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Phrase text
+                    </label>
+                    <textarea
+                      value={templateFormText}
+                      onChange={(e) => setTemplateFormText(e.target.value)}
+                      placeholder="e.g. I've always wanted to..."
+                      rows={4}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition resize-none"
+                    />
+                  </div>
+
+                  {/* Difficulty */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wide">
+                      Difficulty
+                    </label>
+                    <div className="flex gap-2">
+                      {(["easy", "medium", "hard"] as const).map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() =>
+                            setTemplateFormDifficulty(
+                              templateFormDifficulty === d ? "" : d,
+                            )
+                          }
+                          className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition ${
+                            templateFormDifficulty === d
+                              ? d === "easy"
+                                ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                                : d === "medium"
+                                  ? "border-amber-300 bg-amber-50 text-amber-700"
+                                  : "border-red-300 bg-red-50 text-red-700"
+                              : "border-gray-100 bg-gray-50 text-gray-500"
+                          }`}
+                        >
+                          {d.charAt(0).toUpperCase() + d.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSheetView("phrases")}
+                      className="flex-1 rounded-xl border border-gray-200 text-gray-500 text-sm font-bold py-3 transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveTemplate}
+                      disabled={!templateFormText.trim()}
+                      className="flex-2 rounded-xl bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-white text-sm font-bold py-3 transition"
+                    >
+                      Save
+                    </button>
+                  </div>
+
+                  {editingTemplateId && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTemplate(editingTemplateId)}
+                      className="w-full rounded-xl border border-red-200 text-red-400 text-sm font-bold py-2.5 transition"
+                    >
+                      Delete phrase
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* ── Sheet: category-form view ── */}
+            {sheetView === "category-form" && (
+              <>
+                <div className="flex items-center gap-3 px-5 pb-3 border-b border-gray-100">
+                  <button
+                    onClick={() => setSheetView("categories")}
+                    className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs shrink-0"
+                  >
+                    ←
+                  </button>
+                  <p className="text-base font-black text-gray-800">
+                    {editingCategoryId ? "Edit category" : "New category"}
+                  </p>
+                </div>
+                <div className="px-5 py-4 flex flex-col gap-3 pb-8">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Name
+                    </label>
+                    <input
+                      type="text"
+                      value={categoryFormName}
+                      onChange={(e) => setCategoryFormName(e.target.value)}
+                      placeholder="e.g. Business"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 mb-1 uppercase tracking-wide">
+                      Description (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={categoryFormDesc}
+                      onChange={(e) => setCategoryFormDesc(e.target.value)}
+                      placeholder="Short description"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSaveCategory}
+                    disabled={!categoryFormName.trim()}
+                    className="w-full rounded-xl bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-white text-sm font-bold py-3 transition"
+                  >
+                    {editingCategoryId ? "Save changes" : "Create category"}
+                  </button>
+                  {editingCategoryId && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCategory(editingCategoryId)}
+                      className="w-full rounded-xl border border-red-200 text-red-400 hover:bg-red-50 text-sm font-bold py-2.5 transition"
+                    >
+                      Delete category
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
+        </div>
+      )}
+      {/* ── Toast: template moved ── */}
+      {templateMovedToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl bg-gray-800 text-white text-sm font-semibold shadow-lg whitespace-nowrap">
+          {templateMovedToast}
         </div>
       )}
     </div>
