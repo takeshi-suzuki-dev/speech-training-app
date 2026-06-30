@@ -25,6 +25,9 @@ public class SentenceTemplateAudio {
     @Column(name = "sentence_template_id", nullable = false)
     private UUID sentenceTemplateId;
 
+    @Column(name = "voice_option_id")
+    private UUID voiceOptionId;
+
     @Column(name = "voice_role", nullable = false)
     private String voiceRole;
 
@@ -64,6 +67,10 @@ public class SentenceTemplateAudio {
         return sentenceTemplateId;
     }
 
+    public UUID getVoiceOptionId() {
+        return voiceOptionId;
+    }
+
     public String getVoiceRole() {
         return voiceRole;
     }
@@ -86,5 +93,9 @@ public class SentenceTemplateAudio {
 
     public void setAudioPath(String audioPath) {
         this.audioPath = audioPath;
+    }
+
+    public void setVoiceOptionId(UUID voiceOptionId) {
+        this.voiceOptionId = voiceOptionId;
     }
 }

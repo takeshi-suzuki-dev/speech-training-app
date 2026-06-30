@@ -10,7 +10,13 @@ import com.takeshi.backend.entity.SentenceTemplateAudio;
 
 public interface SentenceTemplateAudioRepository extends JpaRepository<SentenceTemplateAudio, UUID> {
 
-    Optional<SentenceTemplateAudio> findBySentenceTemplateIdAndVoiceRole(UUID sentenceTemplateId, String voiceRole);
+    Optional<SentenceTemplateAudio> findBySentenceTemplateIdAndVoiceRole(
+            UUID sentenceTemplateId,
+            String voiceRole);
+
+    Optional<SentenceTemplateAudio> findBySentenceTemplateIdAndVoiceOptionId(
+            UUID sentenceTemplateId,
+            UUID voiceOptionId);
 
     List<SentenceTemplateAudio> findBySentenceTemplateIdIn(List<UUID> sentenceTemplateIds);
 
