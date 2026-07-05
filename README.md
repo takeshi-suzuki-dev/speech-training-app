@@ -1,6 +1,6 @@
 # Speech Training App
 
-A pronunciation training application for English learners using Azure AI Speech and ElevenLabs.
+Turn any sentence you want to master — interview answers, your elevator pitch, tricky phrases — into a personalized pronunciation coach.
 
 The live application is branded "Cadence" in its UI; "Speech Training App" is this repository's project name.
 
@@ -10,14 +10,13 @@ This project started with a Proof of Concept (PoC) to validate pronunciation sco
 
 ## Overview
 
-This application helps English learners improve their pronunciation through:
+This application turns sentences you actually need to say — interview answers, career pitches, or any phrase you want to nail — into targeted pronunciation practice:
 
-- Speech recording and pronunciation assessment using Azure AI Speech
-- Template-based sample audio generation using ElevenLabs
-- Fixed practice phrase selection by category
-- Saved pronunciation assessment results
-- Latest score display for each practice sentence
-- Daily score trend charts and moving averages
+- Add your own practice sentences, not just pick from a fixed list
+- Auto-generated native-speaker sample audio for every sentence you add (ElevenLabs)
+- Word- and phoneme-level pronunciation scoring against your own sentences (Azure AI Speech)
+- Preset categories also available for quick practice without any setup
+- Score history and trend charts to track improvement over time
 
 ---
 
