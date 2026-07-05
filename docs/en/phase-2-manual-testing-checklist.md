@@ -47,24 +47,20 @@ Before testing:
 ### ST-01: Frontend starts
 
 Steps:
-
 1. Start the frontend.
 2. Open the application in a browser.
 
 Expected result:
-
 - The page loads without a runtime error.
 - The account/login area is displayed.
 
 ### ST-02: Backend starts
 
 Steps:
-
 1. Start the backend.
 2. Access the health endpoint.
 
 Expected result:
-
 - The backend responds successfully.
 - No authentication is required for the health endpoint.
 
@@ -73,14 +69,12 @@ Expected result:
 ### AUTH-01: Login with allowlisted Google account
 
 Steps:
-
 1. Open the app.
 2. Click “Login with Google” in the hero (this scrolls to the Account section), or scroll there directly.
 3. Click “Continue with Google”.
 4. Login with an allowlisted Google account.
 
 Expected result:
-
 - Login succeeds.
 - Because this is a fresh sign-in and the account is allowlisted, the app automatically redirects to `/pronunciation`.
 - The signed-in email is visible (via the account menu on `/pronunciation`).
@@ -89,13 +83,11 @@ Expected result:
 ### AUTH-02: Login with non-allowlisted Google account
 
 Steps:
-
 1. Open the app.
 2. Login with a Google account that is not registered in `app_allowed_users`.
 3. Access a protected feature.
 
 Expected result:
-
 - The user is blocked.
 - The backend returns 403.
 - The frontend shows a clear access-denied message.
@@ -103,37 +95,31 @@ Expected result:
 ### AUTH-03: Unauthenticated access to protected API
 
 Steps:
-
 1. Call a protected API without an Authorization header.
 
 Expected result:
-
 - The backend returns 401.
 - Protected data is not returned.
 
 ### AUTH-04: Expired or inactive allowlisted user
 
 Steps:
-
 1. Set an allowlisted user to inactive or expired.
 2. Login with that user.
 3. Access a protected feature.
 
 Expected result:
-
 - The backend returns 403.
 - The user cannot use the protected feature.
 
 ### AUTH-05: Google account no longer matches the linked Firebase UID
 
 Steps:
-
 1. Login once with an allowlisted user so their `app_allowed_users` row gets linked to a Firebase UID.
 2. In the database, change that row's `firebase_uid` to a different value (simulating a mismatch, e.g. the allowlist email was later re-registered under a different Google account).
 3. Login again with the original Google account and access a protected feature.
 
 Expected result:
-
 - The backend returns 403 with the message "This Google account does not match the registered Firebase user."
 - The frontend displays this message clearly.
 - The user cannot use the protected feature.
@@ -141,11 +127,9 @@ Expected result:
 ### AUTH-06: Returning to the landing page while already signed in
 
 Steps:
-
-1. While signed in with an allowlisted account on `/pronunciation`, click the “Cadence” logo in the top-left of the header.
+1. While signed in with an allowlisted account on `/pronunciation`, click the “SpeechAI” logo in the top-left of the header.
 
 Expected result:
-
 - The app navigates to the landing page (`/`).
 - The user is NOT automatically redirected back to `/pronunciation` (auto-redirect only fires right after a fresh sign-in).
 - The Account section shows the signed-in email, a “Go to Pronunciation App” button, and a “Logout” button.
@@ -153,12 +137,10 @@ Expected result:
 ### AUTH-07: Logout from the app header
 
 Steps:
-
 1. On `/pronunciation` or `/history`, click the gray avatar icon in the top-right corner.
 2. Click “Logout” in the dropdown that appears.
 
 Expected result:
-
 - The dropdown shows the signed-in email before logout.
 - The user is signed out.
 - The app navigates to the landing page (`/`).
@@ -168,14 +150,12 @@ Expected result:
 ### TRIAL-01: Submit a trial access request
 
 Steps:
-
 1. Open the app while signed out.
 2. Scroll to the "Access" section.
 3. Enter an email address (and optionally a message).
 4. Click “Send trial request”.
 
 Expected result:
-
 - The default mail client opens with a pre-filled recipient, subject, and body containing the entered email/message.
 - The form switches to a confirmation state indicating the email app should have opened.
 
@@ -184,12 +164,10 @@ Expected result:
 ### CAT-01: Load visible categories
 
 Steps:
-
 1. Login with an allowlisted user.
 2. Open the Practice page.
 
 Expected result:
-
 - Preset categories are displayed.
 - User-owned categories are displayed if they exist.
 - Other users’ private categories are not displayed.
@@ -197,13 +175,11 @@ Expected result:
 ### CAT-02: Create user category
 
 Steps:
-
 1. Click “New” category.
 2. Enter category name and description.
 3. Save.
 
 Expected result:
-
 - The category is created.
 - The category appears in the category list.
 - The category is owned by the signed-in Firebase UID.
@@ -211,56 +187,113 @@ Expected result:
 ### CAT-03: Update user category
 
 Steps:
-
 1. Select a user-created category.
 2. Edit its name or description.
 3. Save.
 
 Expected result:
-
 - The category is updated.
 - The updated values remain after reload.
 
 ### CAT-04: Delete user category
 
 Steps:
-
 1. Select a user-created category that has sentence templates.
 2. Delete the category.
 3. Confirm the deletion dialog.
 
 Expected result:
-
 - The category disappears.
 - Templates under the category disappear.
 - Related generated sample audio cache is removed.
 - Training history is not deleted.
 - Deleted data does not remain visible in the UI.
 
+### CAT-05: Default selection after deleting the currently-viewed category
+
+Known issue as of 2026-07: when the deleted category was the one currently being viewed, the app switches to another category but does not reliably select that category's first (oldest) template — a stale or unexpected template can be shown instead. Root cause not yet confirmed; to be fixed during the `pronunciation/page.tsx` refactor.
+
+Steps:
+1. Create two categories (A and B, in that order).
+2. Add two sentence templates to category B, while B is selected (do not switch away between the two).
+3. Select category A (which has no templates) so its empty state is shown.
+4. Delete category A while it is selected.
+
+Expected result:
+- The app switches to another remaining category (e.g. B).
+- The **first (oldest, top of the list)** template in that category is auto-selected and shown — not the most recently added one.
+
+### CAT-06: Deleting a non-selected category does not change the current view
+
+Known issue as of 2026-07: the current implementation always jumps to the first category in the list when the selected category is deleted, regardless of list position (see CAT-07 / CAT-08). This case (deleting a category that is *not* selected) is expected to already work correctly; it's included here so regression is caught if a future fix accidentally changes this behavior too.
+
+Steps:
+1. Create categories A and B, with A having at least one template.
+2. Select category A so it is currently displayed.
+3. Delete category B (without ever selecting it).
+
+Expected result:
+- Category A and its currently selected template remain displayed, unchanged.
+- Category B disappears from the list.
+
+### CAT-07: Deleting the selected category selects the next one, when one exists
+
+Known issue as of 2026-07: the current implementation selects the first category in the list instead of the next one. Expected to be fixed during the `pronunciation/page.tsx` refactor.
+
+Steps:
+1. Create three categories, in this order: A, B, C.
+2. Select category B so it is currently displayed.
+3. Delete category B.
+
+Expected result:
+- Category C (the one immediately after B in the sidebar list) becomes selected.
+- The first (oldest) template in C is shown.
+
+### CAT-08: Deleting the selected category falls back to the previous one, when it was last in the list
+
+Known issue as of 2026-07: same root cause as CAT-07.
+
+Steps:
+1. Create three categories, in this order: A, B, C.
+2. Select category C (the last one in the sidebar list) so it is currently displayed.
+3. Delete category C.
+
+Expected result:
+- Category B (the one immediately before C in the sidebar list) becomes selected.
+- The first (oldest) template in B is shown.
+
+### CAT-09: Deleting the only remaining category results in an unselected state
+
+Note: preset categories are always visible to any allowlisted user (see CAT-01), so this state may not be reachable through normal UI actions unless your test environment has no preset categories. If it isn't reachable, treat this as a code-review check instead: confirm the fallback path (empty category list) sets no selected category and no selected template without throwing an error.
+
+Steps:
+1. In an environment with no preset categories, delete user-created categories until none remain.
+
+Expected result:
+- No category is selected.
+- No template is selected.
+- The UI shows an empty/no-category state without errors.
+
 ## 9. Sentence Template Management
 
 ### TMP-01: Load templates by category
 
 Steps:
-
 1. Select a category.
 
 Expected result:
-
 - Active templates in the selected category are displayed.
 - Deleted templates are not displayed.
 
 ### TMP-02: Create user template
 
 Steps:
-
 1. Select a user category.
 2. Click “New” practice sentence.
 3. Enter title, text, and difficulty.
 4. Save.
 
 Expected result:
-
 - The template is created.
 - The template appears in the selected category.
 - Sample audio metadata is created for the template.
@@ -268,13 +301,11 @@ Expected result:
 ### TMP-03: Update user template
 
 Steps:
-
 1. Edit a user-created template.
 2. Change the text.
 3. Save.
 
 Expected result:
-
 - The template is updated.
 - Cached sample audio is reset if sample audio text changed.
 - The updated text is used for scoring.
@@ -282,40 +313,76 @@ Expected result:
 ### TMP-04: Delete user template
 
 Steps:
-
 1. Delete a user-created template.
 2. Confirm the deletion dialog.
 
 Expected result:
-
 - The template disappears from the list.
 - Related favorite rows are deleted.
 - Related generated audio cache is deleted.
 - Training history remains.
+
+### TMP-05: Deleting a non-selected template does not change the current view
+
+Steps:
+1. In a category with at least two templates, select template 1.
+2. Delete template 2 (a different template) without ever selecting it.
+
+Expected result:
+- Template 1 remains selected and displayed, unchanged.
+- Template 2 disappears from the list.
+
+### TMP-06: Deleting the selected template selects the next one, when one exists
+
+Known issue as of 2026-07: the current implementation selects the first template in the category instead of the next one. Expected to be fixed during the `pronunciation/page.tsx` refactor.
+
+Steps:
+1. In a category with at least three templates, in this order: 1, 2, 3, select template 2.
+2. Delete template 2.
+
+Expected result:
+- Template 3 (the one immediately after template 2 in the list) becomes selected and displayed.
+
+### TMP-07: Deleting the selected template falls back to the previous one, when it was last in the list
+
+Known issue as of 2026-07: same root cause as TMP-06.
+
+Steps:
+1. In a category with at least three templates, in this order: 1, 2, 3, select template 3 (the last one).
+2. Delete template 3.
+
+Expected result:
+- Template 2 (the one immediately before template 3 in the list) becomes selected and displayed.
+
+### TMP-08: Deleting the only remaining template in a category results in an unselected state
+
+Steps:
+1. In a category with exactly one template, select it.
+2. Delete it.
+
+Expected result:
+- No template is selected.
+- The category shows its empty/no-templates placeholder state, not a blank or broken screen.
 
 ## 10. Favorites
 
 ### FAV-01: Add favorite
 
 Steps:
-
 1. Login.
 2. Select a template.
 3. Add it to favorites.
 
 Expected result:
-
 - The template is marked as favorite.
 - The favorite state remains after reload.
 
 ### FAV-02: Remove favorite
 
 Steps:
-
 1. Remove a favorite template.
 
 Expected result:
-
 - The template is no longer marked as favorite.
 - The favorite state remains removed after reload.
 
@@ -324,56 +391,55 @@ Expected result:
 ### AUD-01: Play sample audio for preset template
 
 Steps:
-
-1. Select a preset template.
+1. Select a preset template (sample audio generation is triggered by selecting the template, not by clicking play).
 2. Click the sample audio play button.
+3. Check the Supabase Storage console directly for the corresponding audio file.
 
 Expected result:
-
 - Audio is generated or loaded from cache.
 - Audio plays successfully.
+- **A corresponding audio file actually exists in Supabase Storage** (do not rely on playback success alone — playback can succeed from a freshly-generated in-memory/streamed response even if the save-to-Storage step silently failed).
 - Replaying the same template is faster after cache is available.
 
 ### AUD-02: Play sample audio for user template
 
-Steps:
+Known issue as of 2026-07: since sample audio generation was changed to trigger on template selection (rather than on clicking play), a case was found where playback succeeded but the file was never saved to Supabase Storage — likely a missed step in that change. To be fixed during the `pronunciation/page.tsx` refactor.
 
-1. Select a user-created template.
+Steps:
+1. Select a user-created template (sample audio generation is triggered by selecting the template, not by clicking play).
 2. Play sample audio.
+3. Check the Supabase Storage console directly for the corresponding audio file.
 
 Expected result:
-
 - Authentication is required.
 - Allowlist access is required.
 - The owner can generate and play the audio.
+- **A corresponding audio file actually exists in Supabase Storage** (do not rely on playback success alone).
 - Other users cannot access private user template audio.
 
 ### AUD-03: Audio cache reset after template update
 
 Steps:
-
-1. Generate sample audio for a user template.
+1. Generate sample audio for a user template (by selecting it) and confirm the file exists in Supabase Storage.
 2. Edit the template text.
 3. Save.
 4. Play sample audio again.
 
 Expected result:
-
 - Old cached audio is not reused.
 - New audio is generated from the updated text.
+- The new audio file is saved to Supabase Storage, replacing or superseding the old one.
 
 ## 12. Pronunciation Assessment
 
 ### PRON-01: Record and score pronunciation
 
 Steps:
-
 1. Select a template.
 2. Record audio.
 3. Submit for scoring.
 
 Expected result:
-
 - Audio is sent to the backend.
 - Azure pronunciation assessment is executed.
 - Scores are displayed.
@@ -382,12 +448,10 @@ Expected result:
 ### PRON-02: No speech / invalid recognition
 
 Steps:
-
 1. Record silence or invalid audio.
 2. Submit for scoring.
 
 Expected result:
-
 - A clear error or recognition status message is shown.
 - Invalid result is not saved as normal training history.
 
@@ -396,22 +460,18 @@ Expected result:
 ### HIST-01: Latest score display
 
 Steps:
-
 1. Complete a pronunciation assessment.
 2. Return to the practice page.
 
 Expected result:
-
 - The latest score for the template is updated.
 
 ### HIST-02: History trend display
 
 Steps:
-
 1. Open the History page.
 
 Expected result:
-
 - Trend data is displayed.
 - Overall score trend is visible.
 - Score breakdown trend is visible if data exists.
@@ -436,6 +496,7 @@ Manual testing is complete when:
 - Navigating back to the landing page and logging out both behave correctly.
 - The trial access request form opens the mail client with the expected content.
 - Categories and templates can be created, updated, and deleted.
+- Deleting a non-selected category or template never disturbs the current view; deleting the selected one follows next-then-previous selection, and an empty result leaves nothing selected.
 - Favorites work correctly.
 - Sample audio can be generated and replayed.
 - Pronunciation scoring works.
