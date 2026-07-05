@@ -209,19 +209,18 @@ Expected result:
 - Training history is not deleted.
 - Deleted data does not remain visible in the UI.
 
-### CAT-05: Default selection after deleting the currently-viewed category
+### CAT-05: Default template selection when returning to a category
 
-Known issue as of 2026-07: when the deleted category was the one currently being viewed, the app switches to another category but does not reliably select that category's first (oldest) template — a stale or unexpected template can be shown instead. Root cause not yet confirmed; to be fixed during the `pronunciation/page.tsx` refactor.
+Known issue as of 2026-07: returning to a category does not reliably select that category's first (oldest) template — a stale or unexpected template can be shown instead. Root cause not yet confirmed; to be fixed during the `pronunciation/page.tsx` refactor. (Previously reproduced via category deletion; deletion no longer triggers an automatic category switch under the current design — see CAT-07 — so this is now reproduced through plain navigation instead.)
 
 Steps:
 1. Create two categories (A and B, in that order).
 2. Add two sentence templates to category B, while B is selected (do not switch away between the two).
-3. Select category A (which has no templates) so its empty state is shown.
-4. Delete category A while it is selected.
+3. Select category A so its (empty or different) content is shown.
+4. Select category B again.
 
 Expected result:
-- The app switches to another remaining category (e.g. B).
-- The **first (oldest, top of the list)** template in that category is auto-selected and shown — not the most recently added one.
+- The **first (oldest, top of the list)** template in B is auto-selected and shown — not the most recently added one.
 
 ### CAT-06: Deleting a non-selected category does not change the current view
 
@@ -236,33 +235,21 @@ Expected result:
 - Category A and its currently selected template remain displayed, unchanged.
 - Category B disappears from the list.
 
-### CAT-07: Deleting the selected category selects the next one, when one exists
+### CAT-07: Deleting the selected category always results in an unselected state
 
-Known issue as of 2026-07: the current implementation selects the first category in the list instead of the next one. Expected to be fixed during the `pronunciation/page.tsx` refactor.
+Design updated 2026-07: category deletion no longer falls back to a next/previous category. Regardless of the deleted category's position in the list, if it was selected, both the category and the sentence become unselected — the user returns to the category list and picks again.
 
 Steps:
 1. Create three categories, in this order: A, B, C.
-2. Select category B so it is currently displayed.
+2. Select category B (or any category) so it is currently displayed.
 3. Delete category B.
 
 Expected result:
-- Category C (the one immediately after B in the sidebar list) becomes selected.
-- The first (oldest) template in C is shown.
+- No category is selected.
+- No sentence is selected.
+- The sidebar/sheet shows the category list view.
 
-### CAT-08: Deleting the selected category falls back to the previous one, when it was last in the list
-
-Known issue as of 2026-07: same root cause as CAT-07.
-
-Steps:
-1. Create three categories, in this order: A, B, C.
-2. Select category C (the last one in the sidebar list) so it is currently displayed.
-3. Delete category C.
-
-Expected result:
-- Category B (the one immediately before C in the sidebar list) becomes selected.
-- The first (oldest) template in B is shown.
-
-### CAT-09: Deleting the only remaining category results in an unselected state
+### CAT-08: Deleting the only remaining category results in an unselected state
 
 Note: preset categories are always visible to any allowlisted user (see CAT-01), so this state may not be reachable through normal UI actions unless your test environment has no preset categories. If it isn't reachable, treat this as a code-review check instead: confirm the fallback path (empty category list) sets no selected category and no selected template without throwing an error.
 
@@ -403,12 +390,10 @@ Expected result:
 
 ### AUD-02: Play sample audio for user template
 
-Known issue as of 2026-07: since sample audio generation was changed to trigger on template selection (rather than on clicking play), a case was found where playback succeeded but the file was never saved to Supabase Storage — likely a missed step in that change. To be fixed during the `pronunciation/page.tsx` refactor.
-
 Steps:
 1. Select a user-created template (sample audio generation is triggered by selecting the template, not by clicking play).
 2. Play sample audio.
-3. Check the Supabase Storage console directly for the corresponding audio file.
+3. Check the Supabase Storage console directly for the corresponding audio file, at `users/{ownerFirebaseUid}/templates/{templateId}/roger.mp3`.
 
 Expected result:
 - Authentication is required.
@@ -496,7 +481,7 @@ Manual testing is complete when:
 - Navigating back to the landing page and logging out both behave correctly.
 - The trial access request form opens the mail client with the expected content.
 - Categories and templates can be created, updated, and deleted.
-- Deleting a non-selected category or template never disturbs the current view; deleting the selected one follows next-then-previous selection, and an empty result leaves nothing selected.
+- Deleting a non-selected category or template never disturbs the current view. Deleting the selected category always unselects both category and sentence. Deleting the selected template follows next-then-previous selection, leaving nothing selected if none remain.
 - Favorites work correctly.
 - Sample audio can be generated and replayed.
 - Pronunciation scoring works.

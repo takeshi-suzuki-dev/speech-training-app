@@ -86,7 +86,12 @@ After deleting a sentence:
 
 - The current category remains selected.
 - The deleted sentence disappears from the sentence list.
-- If the deleted sentence was selected, selected sentence is cleared.
+
+If the deleted sentence was selected:
+
+- The next sentence in the list becomes selected, if one exists.
+- If there is no next sentence, the previous sentence becomes selected.
+- If no sentences remain in the category, no sentence is selected.
 - Audio UI is reset.
 - Practice state is reset.
 - Deleted sentence text must not remain on the screen.
@@ -125,9 +130,8 @@ After deleting a category:
 
 If the deleted category was selected:
 
-- Select the next category if it exists.
-- If there is no next category, select the previous category.
-- If no categories remain, no category is selected.
+- No category is selected.
+- No sentence is selected.
 
 If the deleted category was not selected:
 
@@ -198,7 +202,7 @@ Delete behavior is acceptable when:
 - deleted sentences do not remain in the sentence list
 - deleted categories do not remain in the category list
 - deleted audio does not remain playable from the UI
-- selected sentence is cleared when the selected sentence is deleted
+- when the selected sentence is deleted, the next sentence becomes selected (else the previous one, else nothing)
 - selected sentence/audio/practice state is cleared when the selected category is deleted
 - deleting an unselected category does not affect the current selected category
 - deleting an unselected sentence does not affect the current selected sentence
