@@ -989,14 +989,10 @@ export default function PronunciationPage() {
       setCategories(nextCategories);
 
       if (selectedCategoryId === catId) {
-        const nextCategoryId = nextCategories[0]?.id ?? null;
-        setSelectedCategoryId(nextCategoryId);
-
-        if (!nextCategoryId) {
-          setTemplates([]);
-          setSelectedTemplateId(null);
-          setReferenceText("");
-        }
+        setSelectedCategoryId(null);
+        setTemplates([]);
+        setSelectedTemplateId(null);
+        setReferenceText("Select a category to get started.");
       }
 
       setSidebarView("categories");
@@ -1127,6 +1123,14 @@ export default function PronunciationPage() {
     try {
       setErrorMessage("");
 
+      // Resolve the fallback template (next, else previous, else none) from
+      // the list order *before* deletion.
+      const deletedIndex = templates.findIndex((t) => t.id === templateId);
+      const fallbackTemplateId =
+        (deletedIndex >= 0 ? templates[deletedIndex + 1]?.id : undefined) ??
+        (deletedIndex >= 0 ? templates[deletedIndex - 1]?.id : undefined) ??
+        null;
+
       await deleteSentenceTemplate(templateId);
 
       removeCachedSampleAudioForTemplate(
@@ -1139,9 +1143,14 @@ export default function PronunciationPage() {
         setTemplates(nextTemplates);
 
         if (selectedTemplateId === templateId) {
-          const nextTemplate = nextTemplates[0] ?? null;
+          const nextTemplate = fallbackTemplateId
+            ? (nextTemplates.find((t) => t.id === fallbackTemplateId) ?? null)
+            : null;
           setSelectedTemplateId(nextTemplate?.id ?? null);
-          setReferenceText(nextTemplate?.displayText ?? "");
+          setReferenceText(
+            nextTemplate?.displayText ??
+              "Select a practice sentence to get started.",
+          );
         }
       }
 
