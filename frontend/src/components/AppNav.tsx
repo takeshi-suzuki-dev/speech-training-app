@@ -55,9 +55,7 @@ export default function AppNav() {
         className="font-black bg-linear-to-r from-pink-400 to-violet-400 bg-clip-text text-transparent shrink-0"
       >
         <span className="block md:hidden text-xl leading-none">✦</span>
-        <span className="hidden md:block text-lg leading-none">
-          ✦ SpeechAI
-        </span>
+        <span className="hidden md:block text-lg leading-none">✦ Cadence</span>
       </Link>
 
       {/* Nav buttons */}

@@ -430,7 +430,7 @@ export default function Home() {
       {/* ── Top bar ── */}
       <header className="max-w-300 mx-auto flex items-center px-6 py-5">
         <span className="text-lg font-black text-gray-800 tracking-tight">
-          🗣️ Speech<span className="text-purple-500">AI</span>
+          🗣️ <span className="text-purple-500">Cadence</span>
         </span>
       </header>
 
@@ -511,8 +511,8 @@ export default function Home() {
             </h2>
             <p className="text-gray-500 text-sm leading-relaxed">
               Practice sessions and progress history are limited to approved
-              Google accounts. Submit a request below — I typically grant
-              access within 2 days.
+              Google accounts. Submit a request below — I typically grant access
+              within 2 days.
             </p>
           </div>
 

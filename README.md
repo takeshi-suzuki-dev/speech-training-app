@@ -2,7 +2,9 @@
 
 A pronunciation training application for English learners using Azure AI Speech and ElevenLabs.
 
-This project started with a Proof of Concept (PoC) to validate pronunciation scoring and sample audio generation, and has now reached the Phase 1 MVP implementation.
+The live application is branded "Cadence" in its UI; "Speech Training App" is this repository's project name.
+
+This project started with a Proof of Concept (PoC) to validate pronunciation scoring and sample audio generation, and has since completed Phase 1 (fixed-template MVP) and Phase 2 (authentication and allowlist-gated access).
 
 ---
 
@@ -25,9 +27,8 @@ This project is developed in phases:
 
 - Phase 0: PoC — completed
 - Phase 1: Fixed-template MVP — completed
-- Phase 2: Authentication and user-defined practice sentences — in progress
-- Phase 2.1: Controlled portfolio demo access — in progress
-- Phase 3: Plan-based features, billing, and IT engineer vocabulary practice
+- Phase 2: Authentication, allowlist-gated access, and user-defined practice sentences — completed
+- Phase 3: Plan-based features, billing, multiple sample-audio voice options, and IT engineer vocabulary practice
 - Phase 4: Interview FAQ and free-answer practice
 
 For details:
@@ -122,33 +123,28 @@ Implemented scope:
 - Frontend configuration such as `API_BASE_URL` centralized under `frontend/src/lib/config.ts`
 - Backend project directory flattened to `backend/`
 
-## Current Phase
+### Phase 2 — Authentication, Allowlist-Gated Access, and User-defined Practice Sentences — Completed
 
-### Phase 2 — Authentication, User-defined Practice Sentences, and Controlled Demo Access
+This phase introduced Firebase / Google authentication, an application-level allowlist, user-defined categories, user-defined sentence templates, favorites, and a landing page with a trial access request flow.
 
-Phase 2 is currently in progress on the `feature/auth-user-templates` branch.
+The goal was not to launch the app as a public SaaS. The goal was to make it safe enough to use as a controlled portfolio demo for recruiters. That goal has been met.
 
-This phase introduces Firebase / Google authentication, user-defined categories, user-defined sentence templates, favorites, and Firebase UID based ownership for some user-defined data.
-
-The current goal is not to launch the app as a public SaaS. The goal is to make it safe enough to use as a controlled portfolio demo for recruiters.
-
-Implemented or partially implemented scope:
+Implemented scope:
 
 - Firebase / Google authentication
-- User-defined categories
-- User-defined practice sentences
+- Application-level allowlist (`app_allowed_users`), enforced globally on all protected backend APIs via `FirebaseAuthenticationInterceptor`
+- 401 for unauthenticated requests, 403 for authenticated-but-not-allowed requests (not on the allowlist, inactive, expired, or Firebase UID mismatch)
+- User-defined categories and practice sentences, scoped to the owner's Firebase UID
 - Favorite templates
-- Firebase UID based ownership for some user-defined data
+- Frontend API client that attaches Firebase ID tokens to every backend request
+- Clear unauthorized / forbidden UI states, showing the backend's own denial message
+- Landing page with a trial access request form
+- Account menu (signed-in email + logout) in the app header
 
-Remaining scope before controlled recruiter demo:
+Remaining before broader use (tracked for Phase 3, see below):
 
-- Consistent authentication for protected backend APIs
-- Application-level allowlist for live app access
-- Access control for user-specific templates and audio
-- Protected handling for user-defined sample audio
-- Frontend API calls with Firebase ID tokens
-- Clear unauthorized / forbidden UI states
-- Production CORS configuration
+- Production CORS configuration (currently allows `http://localhost:3000` only)
+- Multiple sample-audio voice options (implemented at the database/design level; not yet exposed via API or UI)
 
 For details:
 
@@ -159,12 +155,13 @@ For details:
 
 ## Future Plans
 
-### Phase 3 — Plan-based Features, Billing, and IT Engineer Vocabulary Practice
+### Phase 3 — Plan-based Features, Billing, Multiple Sample-Audio Voices, and IT Engineer Vocabulary Practice
 
 Phase 3 introduces monetization and plan-based feature control.
 
 Planned scope:
 
+- Multiple sample-audio voice options (already implemented at the database/design level; exposing via API and UI is deferred to this phase)
 - Free / Basic / Plus / Pro plan design
 - Billing system integration
 - Subscription status management
