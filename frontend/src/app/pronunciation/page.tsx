@@ -1,33 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "@/lib/firebase";
-import {
-  fetchLatestAssessmentResultsBySentence,
-  TrainingAttemptResult,
-} from "@/lib/api/assessmentResults";
 import AppNav from "@/components/AppNav";
 import { scorePronunciation } from "@/lib/api/pronunciationAssessment";
-import {
-  createSentenceCategory,
-  createSentenceTemplate,
-  deleteSentenceCategory,
-  deleteSentenceTemplate,
-  fetchSentenceCategories,
-  fetchSentenceTemplates,
-  SentenceCategory,
-  SentenceTemplate,
-  updateSentenceCategory,
-  updateSentenceTemplate,
-} from "@/lib/api/sentenceTemplates";
+import { SentenceTemplate } from "@/lib/api/sentenceTemplates";
 import { generateTemplateSampleAudio } from "@/lib/api/tts";
-import {
-  addTemplateFavorite,
-  fetchFavoriteTemplateIds,
-  removeTemplateFavorite,
-} from "@/lib/api/templateFavorites";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
+import { useCategoryTemplateManager } from "@/hooks/pronunciation/useCategoryTemplateManager";
 
 const MIC_AUTO_RELEASE_MS = 90_000;
 const RECORDING_MAX_MS = 35_000;
@@ -128,49 +107,6 @@ function isEffectivelyNoSpeech(result: SpeechEvaluateResponse): boolean {
   );
 }
 
-const buildTemplateLatestScores = (
-  attempts: TrainingAttemptResult[],
-): Map<string, number> => {
-  const latestBySentenceId = new Map<string, TrainingAttemptResult>();
-
-  for (const attempt of attempts) {
-    if (!attempt.sentenceId || attempt.overallScore == null) {
-      continue;
-    }
-
-    const current = latestBySentenceId.get(attempt.sentenceId);
-
-    if (
-      !current ||
-      new Date(attempt.scoredAt).getTime() >
-        new Date(current.scoredAt).getTime()
-    ) {
-      latestBySentenceId.set(attempt.sentenceId, attempt);
-    }
-  }
-
-  const result = new Map<string, number>();
-
-  for (const [sentenceId, attempt] of latestBySentenceId.entries()) {
-    result.set(sentenceId, Math.round(Number(attempt.overallScore)));
-  }
-
-  return result;
-};
-
-const upsertCategory = (
-  items: SentenceCategory[],
-  category: SentenceCategory,
-): SentenceCategory[] => {
-  const exists = items.some((item) => item.id === category.id);
-
-  const nextItems = exists
-    ? items.map((item) => (item.id === category.id ? category : item))
-    : [...items, category];
-
-  return nextItems.sort((a, b) => a.sortOrder - b.sortOrder);
-};
-
 // ── Score card bg classes ────────────────────────────────────
 const SCORE_CARD_BG = [
   "from-pink-50 to-white",
@@ -205,24 +141,11 @@ function Card({
 
 // ═════════════════════════════════════════════════════════════
 export default function PronunciationPage() {
-  // ── Core state ────────────────────────────────────────────
+  // ── Recording / scoring state ─────────────────────────────
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isMicReady, setIsMicReady] = useState(false);
-  const [referenceText, setReferenceText] = useState(
-    "Hi, There. It's all done.",
-  );
-  const [categories, setCategories] = useState<SentenceCategory[]>([]);
-  const [templates, setTemplates] = useState<SentenceTemplate[]>([]);
-  const [templateLatestScores, setTemplateLatestScores] = useState<
-    Map<string, number>
-  >(new Map());
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
-    null,
-  );
-  const [categoryLoading, setCategoryLoading] = useState(false);
-  const [templateLoading, setTemplateLoading] = useState(false);
   const [result, setResult] = useState<SpeechEvaluateResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [ttsLoading, setTtsLoading] = useState(false);
@@ -230,8 +153,6 @@ export default function PronunciationPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [expandedWord, setExpandedWord] = useState<number | null>(null);
   const [scored, setScored] = useState(false);
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
   // ── Audio player state (TTS / Roger) ─────────────────────
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -243,38 +164,6 @@ export default function PronunciationPage() {
 
   // ── UI state ──────────────────────────────────────────────
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetView, setSheetView] = useState<
-    "phrases" | "categories" | "category-form" | "phrase-form"
-  >("phrases");
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
-    null,
-  );
-  const [sidebarView, setSidebarView] = useState<
-    "categories" | "phrases" | "category-form" | "phrase-form"
-  >("categories");
-
-  // ── Category CRUD state ───────────────────────────────────
-  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(
-    null,
-  );
-  const [categoryFormName, setCategoryFormName] = useState("");
-  const [categoryFormDesc, setCategoryFormDesc] = useState("");
-
-  // ── Template CRUD state ───────────────────────────────────
-  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(
-    null,
-  );
-  const [templateFormCategoryId, setTemplateFormCategoryId] = useState<
-    string | null
-  >(null);
-  const [templateFormTitle, setTemplateFormTitle] = useState("");
-  const [templateFormText, setTemplateFormText] = useState("");
-  const [templateFormDifficulty, setTemplateFormDifficulty] = useState<
-    "easy" | "medium" | "hard" | ""
-  >("");
-  const [templateMovedToast, setTemplateMovedToast] = useState<string | null>(
-    null,
-  );
 
   // ── Refs ──────────────────────────────────────────────────
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -286,13 +175,11 @@ export default function PronunciationPage() {
   const recordingLimitTimerRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const myVoiceRef = useRef<HTMLAudioElement>(null);
-  const pendingTemplateSelectRef = useRef<string | null>(null);
   const sampleAudioCacheRef = useRef<Map<string, CachedSampleAudio>>(new Map());
   const sampleAudioLoadingRef = useRef<Map<string, Promise<string>>>(new Map());
   const pendingSampleAudioAutoPlayRef = useRef(false);
-  const templateMovedToastTimerRef = useRef<number | null>(null);
 
-  const resetSampleAudioState = () => {
+  const resetSampleAudioState = useCallback(() => {
     pendingSampleAudioAutoPlayRef.current = false;
 
     if (audioRef.current) {
@@ -306,7 +193,7 @@ export default function PronunciationPage() {
     setCurrentTime(0);
     setDuration(0);
     setTtsLoading(false);
-  };
+  }, []);
 
   const getOrCreateSampleAudioUrl = useCallback(
     async (template: SentenceTemplate): Promise<string> => {
@@ -349,18 +236,15 @@ export default function PronunciationPage() {
     [],
   );
 
-  const showTemplateMovedToast = (message: string) => {
-    if (templateMovedToastTimerRef.current) {
-      window.clearTimeout(templateMovedToastTimerRef.current);
-    }
+  const removeCachedAudioForTemplate = useCallback((templateId: string) => {
+    removeCachedSampleAudioForTemplate(sampleAudioCacheRef.current, templateId);
+  }, []);
 
-    setTemplateMovedToast(message);
-
-    templateMovedToastTimerRef.current = window.setTimeout(() => {
-      setTemplateMovedToast(null);
-      templateMovedToastTimerRef.current = null;
-    }, 2500);
-  };
+  const catTpl = useCategoryTemplateManager({
+    resetSampleAudioState,
+    removeCachedAudioForTemplate,
+    reportError: setErrorMessage,
+  });
 
   // ── Mic helpers ───────────────────────────────────────────
   const clearRecordingLimitTimer = () => {
@@ -406,10 +290,6 @@ export default function PronunciationPage() {
         window.clearTimeout(releaseTimerRef.current);
       }
 
-      if (templateMovedToastTimerRef.current) {
-        window.clearTimeout(templateMovedToastTimerRef.current);
-      }
-
       processorRef.current?.disconnect();
       sourceRef.current?.disconnect();
       recordingStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -425,174 +305,6 @@ export default function PronunciationPage() {
       sampleAudioLoading.clear();
     };
   }, []);
-
-  useEffect(() => {
-    let ignore = false;
-
-    const loadCategories = async () => {
-      try {
-        setCategoryLoading(true);
-        setErrorMessage("");
-
-        const data = await fetchSentenceCategories();
-
-        if (ignore) {
-          return;
-        }
-
-        setCategories(data);
-
-        setSelectedCategoryId((currentId) => {
-          if (currentId && data.some((category) => category.id === currentId)) {
-            return currentId;
-          }
-
-          return data[0]?.id ?? null;
-        });
-      } catch (error) {
-        if (!ignore) {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "Failed to load sentence categories.",
-          );
-        }
-      } finally {
-        if (!ignore) {
-          setCategoryLoading(false);
-        }
-      }
-    };
-
-    const unsubscribe = onAuthStateChanged(auth, () => {
-      void loadCategories();
-    });
-
-    return () => {
-      ignore = true;
-      unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    let ignore = false;
-
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        if (!ignore) {
-          setFavorites(new Set());
-        }
-        return;
-      }
-
-      try {
-        const favoriteIds = await fetchFavoriteTemplateIds();
-
-        if (ignore) {
-          return;
-        }
-
-        setFavorites(new Set(favoriteIds));
-      } catch (error) {
-        console.error(error);
-      }
-    });
-
-    return () => {
-      ignore = true;
-      unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    let ignore = false;
-
-    const loadAssessmentResults = async () => {
-      try {
-        const attempts = await fetchLatestAssessmentResultsBySentence();
-
-        if (ignore) {
-          return;
-        }
-
-        setTemplateLatestScores(buildTemplateLatestScores(attempts));
-      } catch (error) {
-        console.error(error);
-      }
-    };
-
-    void loadAssessmentResults();
-
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  // ── when selected Category ─────────────────────────────────────────────
-  useEffect(() => {
-    if (!selectedCategoryId) {
-      pendingTemplateSelectRef.current = null;
-      setTemplates([]);
-      setSelectedTemplateId(null);
-      setReferenceText("Select a practice sentence to get started.");
-      resetSampleAudioState();
-      return;
-    }
-
-    let ignore = false;
-
-    const loadTemplates = async () => {
-      try {
-        setTemplateLoading(true);
-        setErrorMessage("");
-
-        const data = await fetchSentenceTemplates(selectedCategoryId);
-
-        if (ignore) {
-          return;
-        }
-
-        setTemplates(data);
-
-        const pendingTemplateId = pendingTemplateSelectRef.current;
-        const pendingTemplate = pendingTemplateId
-          ? (data.find((template) => template.id === pendingTemplateId) ?? null)
-          : null;
-
-        pendingTemplateSelectRef.current = null;
-
-        const nextTemplate = pendingTemplate ?? data[0] ?? null;
-
-        if (nextTemplate) {
-          setSelectedTemplateId(nextTemplate.id);
-          setReferenceText(nextTemplate.displayText);
-        } else {
-          setSelectedTemplateId(null);
-          setReferenceText("Select a practice sentence to get started.");
-        }
-
-        resetSampleAudioState();
-      } catch (error) {
-        if (!ignore) {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "Failed to load sentence templates.",
-          );
-        }
-      } finally {
-        if (!ignore) {
-          setTemplateLoading(false);
-        }
-      }
-    };
-
-    void loadTemplates();
-
-    return () => {
-      ignore = true;
-    };
-  }, [selectedCategoryId]);
 
   // ── Recording ─────────────────────────────────────────────
   const handleStartRecording = async () => {
@@ -772,7 +484,7 @@ export default function PronunciationPage() {
       return;
     }
 
-    if (!referenceText.trim()) {
+    if (!catTpl.referenceText.trim()) {
       setErrorMessage("Please enter reference text.");
       return;
     }
@@ -816,7 +528,7 @@ export default function PronunciationPage() {
       setResult(null);
       return;
     }
-    if (!referenceText.trim()) {
+    if (!catTpl.referenceText.trim()) {
       setErrorMessage("Please enter reference text.");
       setResult(null);
       return;
@@ -824,7 +536,7 @@ export default function PronunciationPage() {
     try {
       setLoading(true);
       setErrorMessage("");
-      const scoringText = selectedTemplate?.scoringText ?? referenceText;
+      const scoringText = selectedTemplate?.scoringText ?? catTpl.referenceText;
       const response = await scorePronunciation(
         audioFile,
         scoringText,
@@ -834,8 +546,7 @@ export default function PronunciationPage() {
       setExpandedWord(null);
       setScored(true);
 
-      const attempts = await fetchLatestAssessmentResultsBySentence();
-      setTemplateLatestScores(buildTemplateLatestScores(attempts));
+      await catTpl.refreshLatestScores();
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -855,327 +566,23 @@ export default function PronunciationPage() {
   };
 
   const selectTemplate = (template: SentenceTemplate) => {
-    setSelectedTemplateId(template.id);
-    setReferenceText(template.displayText);
-    resetSampleAudioState();
+    catTpl.selectTemplate(template);
     setSheetOpen(false);
   };
 
-  const toggleFavorite = async (templateId: string, e: React.MouseEvent) => {
+  const handleToggleFavorite = (templateId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-
-    const wasFavorite = favorites.has(templateId);
-
-    setFavorites((prev) => {
-      const next = new Set(prev);
-
-      if (wasFavorite) {
-        next.delete(templateId);
-      } else {
-        next.add(templateId);
-      }
-
-      return next;
-    });
-
-    try {
-      if (wasFavorite) {
-        await removeTemplateFavorite(templateId);
-      } else {
-        await addTemplateFavorite(templateId);
-      }
-    } catch (error) {
-      setFavorites((prev) => {
-        const next = new Set(prev);
-
-        if (wasFavorite) {
-          next.add(templateId);
-        } else {
-          next.delete(templateId);
-        }
-
-        return next;
-      });
-
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to update favorite.",
-      );
-    }
-  };
-
-  // ── Category CRUD helpers ─────────────────────────────────
-  const openNewCategoryForm = (isMobile: boolean) => {
-    setEditingCategoryId(null);
-    setCategoryFormName("");
-    setCategoryFormDesc("");
-    if (isMobile) {
-      setSheetView("category-form");
-    } else {
-      setSidebarView("category-form");
-    }
-  };
-
-  const openEditCategoryForm = (cat: SentenceCategory, isMobile: boolean) => {
-    setEditingCategoryId(cat.id);
-    setCategoryFormName(cat.displayName);
-    setCategoryFormDesc(cat.description ?? "");
-    if (isMobile) {
-      setSheetView("category-form");
-    } else {
-      setSidebarView("category-form");
-    }
-  };
-
-  const handleSaveCategory = async () => {
-    const name = categoryFormName.trim();
-
-    if (!name) {
-      return;
-    }
-
-    const request = {
-      displayName: name,
-      description: categoryFormDesc.trim() || null,
-    };
-
-    try {
-      setErrorMessage("");
-
-      const isEditing = Boolean(editingCategoryId);
-
-      const savedCategory = editingCategoryId
-        ? await updateSentenceCategory(editingCategoryId, request)
-        : await createSentenceCategory(request);
-
-      const fetchedCategories = await fetchSentenceCategories();
-      const nextCategories = upsertCategory(fetchedCategories, savedCategory);
-
-      setCategories(nextCategories);
-
-      if (isEditing) {
-        setSelectedCategoryId((currentId) => currentId ?? savedCategory.id);
-      } else {
-        setSelectedCategoryId(savedCategory.id);
-        setTemplates([]);
-        setSelectedTemplateId(null);
-        setReferenceText("Select a practice sentence to get started.");
-      }
-
-      setSidebarView("categories");
-      setSheetView("categories");
-      setEditingCategoryId(null);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to save category.",
-      );
-    }
-  };
-
-  const handleDeleteCategory = async (catId: string) => {
-    const ok = window.confirm(
-      "Delete this category?\n\nAll practice sentences in this category will also be deleted.\nThis action cannot be undone.",
-    );
-
-    if (!ok) {
-      return;
-    }
-
-    try {
-      setErrorMessage("");
-
-      await deleteSentenceCategory(catId);
-
-      const nextCategories = await fetchSentenceCategories();
-      setCategories(nextCategories);
-
-      if (selectedCategoryId === catId) {
-        setSelectedCategoryId(null);
-        setTemplates([]);
-        setSelectedTemplateId(null);
-        setReferenceText("Select a category to get started.");
-      }
-
-      setSidebarView("categories");
-      setSheetView("categories");
-      setEditingCategoryId(null);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to delete category.",
-      );
-    }
-  };
-
-  // ── Template CRUD helpers ─────────────────────────────────
-  const openNewTemplateForm = (isMobile: boolean) => {
-    setEditingTemplateId(null);
-    setTemplateFormCategoryId(selectedCategoryId);
-    setTemplateFormTitle("");
-    setTemplateFormText("");
-    setTemplateFormDifficulty("");
-    if (isMobile) {
-      setSheetView("phrase-form");
-    } else {
-      setSidebarView("phrase-form");
-    }
-  };
-
-  const openEditTemplateForm = (
-    template: SentenceTemplate,
-    isMobile: boolean,
-  ) => {
-    setEditingTemplateId(template.id);
-    setTemplateFormCategoryId(template.categoryId);
-    setTemplateFormTitle(template.title ?? "");
-    setTemplateFormText(template.displayText);
-    setTemplateFormDifficulty(
-      (template.difficulty?.toLowerCase() as "easy" | "medium" | "hard") ?? "",
-    );
-    if (isMobile) {
-      setSheetView("phrase-form");
-    } else {
-      setSidebarView("phrase-form");
-    }
-  };
-
-  const handleSaveTemplate = async () => {
-    const text = templateFormText.trim();
-
-    if (!text) {
-      return;
-    }
-
-    const destCategoryId = templateFormCategoryId ?? selectedCategoryId;
-
-    if (!destCategoryId) {
-      setErrorMessage("Please select a category.");
-      return;
-    }
-
-    const title = templateFormTitle.trim();
-    const difficulty = templateFormDifficulty || "easy";
-
-    const request = {
-      categoryId: destCategoryId,
-      title,
-      displayText: text,
-      scoringText: text,
-      sampleAudioText: text,
-      difficulty,
-    };
-
-    try {
-      setErrorMessage("");
-
-      const savedTemplate = editingTemplateId
-        ? await updateSentenceTemplate(editingTemplateId, request)
-        : await createSentenceTemplate(request);
-
-      if (editingTemplateId) {
-        removeCachedSampleAudioForTemplate(
-          sampleAudioCacheRef.current,
-          editingTemplateId,
-        );
-      }
-
-      const movedToAnotherCategory = selectedCategoryId !== destCategoryId;
-
-      if (movedToAnotherCategory) {
-        pendingTemplateSelectRef.current = savedTemplate.id;
-        setSelectedCategoryId(destCategoryId);
-        resetSampleAudioState();
-        showTemplateMovedToast("Practice sentence moved to another category.");
-      } else {
-        const nextTemplates = await fetchSentenceTemplates(destCategoryId);
-        setTemplates(nextTemplates);
-
-        const nextSavedTemplate =
-          nextTemplates.find((template) => template.id === savedTemplate.id) ??
-          savedTemplate;
-
-        if (!editingTemplateId || selectedTemplateId === editingTemplateId) {
-          setSelectedTemplateId(nextSavedTemplate.id);
-          setReferenceText(nextSavedTemplate.displayText);
-          resetSampleAudioState();
-        }
-      }
-
-      setSidebarView("phrases");
-      setSheetView("phrases");
-      setEditingTemplateId(null);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to save practice sentence.",
-      );
-    }
-  };
-
-  const handleDeleteTemplate = async (templateId: string) => {
-    const ok = window.confirm(
-      "Delete this practice sentence?\n\nThe sample audio file for this sentence will also be deleted.\nYour past practice history will remain.",
-    );
-
-    if (!ok) {
-      return;
-    }
-
-    try {
-      setErrorMessage("");
-
-      // Resolve the fallback template (next, else previous, else none) from
-      // the list order *before* deletion.
-      const deletedIndex = templates.findIndex((t) => t.id === templateId);
-      const fallbackTemplateId =
-        (deletedIndex >= 0 ? templates[deletedIndex + 1]?.id : undefined) ??
-        (deletedIndex >= 0 ? templates[deletedIndex - 1]?.id : undefined) ??
-        null;
-
-      await deleteSentenceTemplate(templateId);
-
-      removeCachedSampleAudioForTemplate(
-        sampleAudioCacheRef.current,
-        templateId,
-      );
-
-      if (selectedCategoryId) {
-        const nextTemplates = await fetchSentenceTemplates(selectedCategoryId);
-        setTemplates(nextTemplates);
-
-        if (selectedTemplateId === templateId) {
-          const nextTemplate = fallbackTemplateId
-            ? (nextTemplates.find((t) => t.id === fallbackTemplateId) ?? null)
-            : null;
-          setSelectedTemplateId(nextTemplate?.id ?? null);
-          setReferenceText(
-            nextTemplate?.displayText ??
-              "Select a practice sentence to get started.",
-          );
-        }
-      }
-
-      setSidebarView("phrases");
-      setSheetView("phrases");
-      setEditingTemplateId(null);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to delete practice sentence.",
-      );
-    }
+    void catTpl.toggleFavorite(templateId);
   };
 
   // ── Derived ───────────────────────────────────────────────
   const words = result?.words ?? [];
   const sentenceScores = result?.sentenceScores;
-  const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
-  const selectedTemplate =
-    templates.find((template) => template.id === selectedTemplateId) ?? null;
+  const selectedCategory = catTpl.categories.find(
+    (c) => c.id === catTpl.selectedCategoryId,
+  );
+  const selectedTemplate = catTpl.selectedTemplate;
   const hasSelectedTemplate = selectedTemplate !== null;
-  const filteredTemplates = favoritesOnly
-    ? templates.filter((t) => favorites.has(t.id))
-    : templates;
 
   useEffect(() => {
     if (!selectedTemplate) {
@@ -1241,25 +648,25 @@ export default function PronunciationPage() {
         <aside className="hidden md:flex flex-col gap-4 w-72 shrink-0">
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
             {/* ── Category view ── */}
-            {sidebarView === "categories" && (
+            {catTpl.sidebarView === "categories" && (
               <div className="p-5">
                 <div className="flex items-center justify-between mb-3">
                   <SectionLabel>Category</SectionLabel>
                   <button
                     type="button"
-                    onClick={() => openNewCategoryForm(false)}
+                    onClick={() => catTpl.openNewCategoryForm(false)}
                     className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-purple-500 bg-purple-50 hover:bg-purple-100 transition"
                   >
                     + New
                   </button>
                 </div>
-                {categoryLoading ? (
+                {catTpl.categoryLoading ? (
                   <p className="text-xs text-gray-400 py-4 text-center">
                     Loading…
                   </p>
                 ) : (
                   <div className="flex flex-col gap-1.5">
-                    {categories.map((cat) => (
+                    {catTpl.categories.map((cat) => (
                       <div
                         key={cat.id}
                         className="group flex w-full items-center gap-3 rounded-xl border-2 border-transparent px-3 py-2.5 transition hover:border-purple-100 hover:bg-purple-50"
@@ -1268,8 +675,8 @@ export default function PronunciationPage() {
                           type="button"
                           className="flex items-center gap-3 flex-1 min-w-0 text-left"
                           onClick={() => {
-                            setSelectedCategoryId(cat.id);
-                            setSidebarView("phrases");
+                            catTpl.selectCategory(cat.id);
+                            catTpl.setSidebarView("phrases");
                           }}
                         >
                           <span className="text-xl w-7 text-center shrink-0">
@@ -1289,7 +696,9 @@ export default function PronunciationPage() {
                         <button
                           type="button"
                           aria-label={`Edit ${cat.displayName}`}
-                          onClick={() => openEditCategoryForm(cat, false)}
+                          onClick={() =>
+                            catTpl.openEditCategoryForm(cat, false)
+                          }
                           className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs shrink-0"
                         >
                           ✎
@@ -1305,12 +714,12 @@ export default function PronunciationPage() {
             )}
 
             {/* ── Phrase view ── */}
-            {sidebarView === "phrases" && (
+            {catTpl.sidebarView === "phrases" && (
               <div className="p-5">
                 {/* Header */}
                 <div className="flex items-center gap-2 mb-3">
                   <button
-                    onClick={() => setSidebarView("categories")}
+                    onClick={() => catTpl.setSidebarView("categories")}
                     className="w-7 h-7 rounded-full bg-gray-100 hover:bg-purple-50 flex items-center justify-center text-gray-400 hover:text-purple-400 transition text-xs shrink-0"
                   >
                     ←
@@ -1325,7 +734,7 @@ export default function PronunciationPage() {
                   </span>
                   <button
                     type="button"
-                    onClick={() => openNewTemplateForm(false)}
+                    onClick={() => catTpl.openNewTemplateForm(false)}
                     className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-purple-500 bg-purple-50 hover:bg-purple-100 transition shrink-0"
                   >
                     + New
@@ -1334,30 +743,33 @@ export default function PronunciationPage() {
 
                 {/* Fav filter toggle */}
                 <button
-                  onClick={() => setFavoritesOnly((v) => !v)}
+                  onClick={() => catTpl.setFavoritesOnly((v) => !v)}
                   className={`mb-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${
-                    favoritesOnly
+                    catTpl.favoritesOnly
                       ? "bg-amber-50 border-amber-300 text-amber-600"
                       : "bg-gray-50 border-gray-200 text-gray-400 hover:border-purple-200 hover:text-purple-400"
                   }`}
                 >
-                  {favoritesOnly ? "★" : "☆"} Favorites only
+                  {catTpl.favoritesOnly ? "★" : "☆"} Favorites only
                 </button>
 
                 {/* Phrase list */}
-                {templateLoading ? (
+                {catTpl.templateLoading ? (
                   <p className="py-6 text-center text-xs text-gray-400">
                     Loading…
                   </p>
-                ) : filteredTemplates.length === 0 ? (
+                ) : catTpl.filteredTemplates.length === 0 ? (
                   <p className="py-6 text-center text-xs text-gray-400">
-                    {favoritesOnly ? "No favorites yet." : "No templates yet."}
+                    {catTpl.favoritesOnly
+                      ? "No catTpl.favorites yet."
+                      : "No catTpl.templates yet."}
                   </p>
                 ) : (
                   <div className="flex flex-col gap-2">
-                    {filteredTemplates.map((template) => {
-                      const isSelected = selectedTemplateId === template.id;
-                      const isFav = favorites.has(template.id);
+                    {catTpl.filteredTemplates.map((template) => {
+                      const isSelected =
+                        catTpl.selectedTemplateId === template.id;
+                      const isFav = catTpl.favorites.has(template.id);
                       const diff = template.difficulty?.toLowerCase() ?? "";
                       const diffBadge =
                         diff === "easy"
@@ -1369,7 +781,9 @@ export default function PronunciationPage() {
                               : "bg-gray-100 text-gray-500";
                       const diffLabel =
                         diff.charAt(0).toUpperCase() + diff.slice(1) || "—";
-                      const lastScore = templateLatestScores.get(template.id);
+                      const lastScore = catTpl.templateLatestScores.get(
+                        template.id,
+                      );
                       const dotColor =
                         lastScore == null
                           ? "bg-gray-200"
@@ -1431,7 +845,9 @@ export default function PronunciationPage() {
                           {/* Star - always visible, outside select button */}
                           <button
                             type="button"
-                            onClick={(e) => toggleFavorite(template.id, e)}
+                            onClick={(e) =>
+                              handleToggleFavorite(template.id, e)
+                            }
                             className={`absolute top-2.5 right-8 text-sm transition hover:scale-125 ${isFav ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
                           >
                             {isFav ? "★" : "☆"}
@@ -1441,7 +857,7 @@ export default function PronunciationPage() {
                             type="button"
                             aria-label="Edit phrase"
                             onClick={() =>
-                              openEditTemplateForm(template, false)
+                              catTpl.openEditTemplateForm(template, false)
                             }
                             className="absolute top-2 right-1 opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs"
                           >
@@ -1455,17 +871,17 @@ export default function PronunciationPage() {
               </div>
             )}
             {/* ── Phrase form view ── */}
-            {sidebarView === "phrase-form" && (
+            {catTpl.sidebarView === "phrase-form" && (
               <div className="p-5">
                 <div className="flex items-center gap-2 mb-4">
                   <button
-                    onClick={() => setSidebarView("phrases")}
+                    onClick={() => catTpl.setSidebarView("phrases")}
                     className="w-7 h-7 rounded-full bg-gray-100 hover:bg-purple-50 flex items-center justify-center text-gray-400 hover:text-purple-400 transition text-xs shrink-0"
                   >
                     ←
                   </button>
                   <span className="text-sm font-bold text-gray-700">
-                    {editingTemplateId ? "Edit phrase" : "New phrase"}
+                    {catTpl.editingTemplateId ? "Edit phrase" : "New phrase"}
                   </span>
                 </div>
 
@@ -1476,13 +892,15 @@ export default function PronunciationPage() {
                       Category
                     </label>
                     <div className="grid grid-cols-2 gap-1.5">
-                      {categories.map((cat) => (
+                      {catTpl.categories.map((cat) => (
                         <button
                           key={cat.id}
                           type="button"
-                          onClick={() => setTemplateFormCategoryId(cat.id)}
+                          onClick={() =>
+                            catTpl.setTemplateFormCategoryId(cat.id)
+                          }
                           className={`rounded-xl border-2 px-3 py-2 text-left text-sm font-bold transition ${
-                            templateFormCategoryId === cat.id
+                            catTpl.templateFormCategoryId === cat.id
                               ? "border-purple-300 bg-purple-50 text-purple-700"
                               : "border-gray-100 bg-gray-50 text-gray-500 hover:border-purple-200"
                           }`}
@@ -1500,8 +918,10 @@ export default function PronunciationPage() {
                     </label>
                     <input
                       type="text"
-                      value={templateFormTitle}
-                      onChange={(e) => setTemplateFormTitle(e.target.value)}
+                      value={catTpl.templateFormTitle}
+                      onChange={(e) =>
+                        catTpl.setTemplateFormTitle(e.target.value)
+                      }
                       placeholder="e.g. Why Australia"
                       className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
                     />
@@ -1513,8 +933,10 @@ export default function PronunciationPage() {
                       Phrase text
                     </label>
                     <textarea
-                      value={templateFormText}
-                      onChange={(e) => setTemplateFormText(e.target.value)}
+                      value={catTpl.templateFormText}
+                      onChange={(e) =>
+                        catTpl.setTemplateFormText(e.target.value)
+                      }
                       placeholder="e.g. I've always wanted to..."
                       rows={3}
                       className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition resize-none"
@@ -1532,12 +954,12 @@ export default function PronunciationPage() {
                           key={d}
                           type="button"
                           onClick={() =>
-                            setTemplateFormDifficulty(
-                              templateFormDifficulty === d ? "" : d,
+                            catTpl.setTemplateFormDifficulty(
+                              catTpl.templateFormDifficulty === d ? "" : d,
                             )
                           }
                           className={`rounded-xl border-2 px-3 py-1.5 text-sm font-bold transition ${
-                            templateFormDifficulty === d
+                            catTpl.templateFormDifficulty === d
                               ? d === "easy"
                                 ? "border-emerald-300 bg-emerald-50 text-emerald-700"
                                 : d === "medium"
@@ -1555,25 +977,27 @@ export default function PronunciationPage() {
                   <div className="flex gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => setSidebarView("phrases")}
+                      onClick={() => catTpl.setSidebarView("phrases")}
                       className="flex-1 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 text-sm font-bold py-2 transition"
                     >
                       Cancel
                     </button>
                     <button
                       type="button"
-                      onClick={handleSaveTemplate}
-                      disabled={!templateFormText.trim()}
+                      onClick={catTpl.handleSaveTemplate}
+                      disabled={!catTpl.templateFormText.trim()}
                       className="flex-2 rounded-xl bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-white text-sm font-bold py-2 transition"
                     >
                       Save
                     </button>
                   </div>
 
-                  {editingTemplateId && (
+                  {catTpl.editingTemplateId && (
                     <button
                       type="button"
-                      onClick={() => handleDeleteTemplate(editingTemplateId)}
+                      onClick={() =>
+                        catTpl.handleDeleteTemplate(catTpl.editingTemplateId!)
+                      }
                       className="w-full rounded-xl border border-red-200 text-red-400 hover:bg-red-50 text-sm font-bold py-2 transition"
                     >
                       Delete phrase
@@ -1583,17 +1007,19 @@ export default function PronunciationPage() {
               </div>
             )}
             {/* ── Category form view ── */}
-            {sidebarView === "category-form" && (
+            {catTpl.sidebarView === "category-form" && (
               <div className="p-5">
                 <div className="flex items-center gap-2 mb-4">
                   <button
-                    onClick={() => setSidebarView("categories")}
+                    onClick={() => catTpl.setSidebarView("categories")}
                     className="w-7 h-7 rounded-full bg-gray-100 hover:bg-purple-50 flex items-center justify-center text-gray-400 hover:text-purple-400 transition text-xs shrink-0"
                   >
                     ←
                   </button>
                   <span className="text-sm font-bold text-gray-700">
-                    {editingCategoryId ? "Edit category" : "New category"}
+                    {catTpl.editingCategoryId
+                      ? "Edit category"
+                      : "New category"}
                   </span>
                 </div>
 
@@ -1604,8 +1030,10 @@ export default function PronunciationPage() {
                     </label>
                     <input
                       type="text"
-                      value={categoryFormName}
-                      onChange={(e) => setCategoryFormName(e.target.value)}
+                      value={catTpl.categoryFormName}
+                      onChange={(e) =>
+                        catTpl.setCategoryFormName(e.target.value)
+                      }
                       placeholder="e.g. Business"
                       className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
                     />
@@ -1616,8 +1044,10 @@ export default function PronunciationPage() {
                     </label>
                     <input
                       type="text"
-                      value={categoryFormDesc}
-                      onChange={(e) => setCategoryFormDesc(e.target.value)}
+                      value={catTpl.categoryFormDesc}
+                      onChange={(e) =>
+                        catTpl.setCategoryFormDesc(e.target.value)
+                      }
                       placeholder="Short description"
                       className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
                     />
@@ -1625,17 +1055,21 @@ export default function PronunciationPage() {
 
                   <button
                     type="button"
-                    onClick={handleSaveCategory}
-                    disabled={!categoryFormName.trim()}
+                    onClick={catTpl.handleSaveCategory}
+                    disabled={!catTpl.categoryFormName.trim()}
                     className="w-full rounded-xl bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-white text-sm font-bold py-2.5 transition"
                   >
-                    {editingCategoryId ? "Save changes" : "Create category"}
+                    {catTpl.editingCategoryId
+                      ? "Save changes"
+                      : "Create category"}
                   </button>
 
-                  {editingCategoryId && (
+                  {catTpl.editingCategoryId && (
                     <button
                       type="button"
-                      onClick={() => handleDeleteCategory(editingCategoryId)}
+                      onClick={() =>
+                        catTpl.handleDeleteCategory(catTpl.editingCategoryId!)
+                      }
                       className="w-full rounded-xl border border-red-200 text-red-400 hover:bg-red-50 text-sm font-bold py-2 transition"
                     >
                       Delete category
@@ -1653,17 +1087,17 @@ export default function PronunciationPage() {
         <main className="flex-1 min-w-0 flex flex-col gap-4 px-4 pt-5 pb-10 md:px-0 md:pt-0">
           {/* Mobile: category chips */}
           <div className="flex gap-2 overflow-x-auto pb-1 md:hidden">
-            {categories.map((cat) => (
+            {catTpl.categories.map((cat) => (
               <button
                 key={cat.id}
                 type="button"
                 onClick={() => {
-                  setSelectedCategoryId(cat.id);
-                  setSheetView("phrases");
+                  catTpl.selectCategory(cat.id);
+                  catTpl.setSheetView("phrases");
                   setSheetOpen(true);
                 }}
                 className={`shrink-0 rounded-full border-2 px-4 py-2 text-sm font-bold transition ${
-                  selectedCategoryId === cat.id
+                  catTpl.selectedCategoryId === cat.id
                     ? "border-transparent bg-linear-to-r from-pink-300 to-violet-400 text-white"
                     : "border-purple-100 bg-white text-gray-400"
                 }`}
@@ -1673,9 +1107,9 @@ export default function PronunciationPage() {
             ))}
             <button
               type="button"
-              aria-label="Manage categories"
+              aria-label="Manage catTpl.categories"
               onClick={() => {
-                setSheetView("categories");
+                catTpl.setSheetView("categories");
                 setSheetOpen(true);
               }}
               className="shrink-0 rounded-full border-2 border-gray-100 bg-white text-gray-400 hover:border-purple-200 hover:text-purple-400 w-10 h-10 flex items-center justify-center transition text-base"
@@ -1692,7 +1126,7 @@ export default function PronunciationPage() {
                 hasSelectedTemplate ? "text-gray-800" : "text-gray-400"
               }`}
             >
-              {referenceText}
+              {catTpl.referenceText}
             </p>
 
             {/* Audio element — hidden, controlled via state */}
@@ -2193,7 +1627,7 @@ export default function PronunciationPage() {
             <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-4" />
 
             {/* ── Sheet: phrases view ── */}
-            {sheetView === "phrases" && (
+            {catTpl.sheetView === "phrases" && (
               <>
                 <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-100">
                   <div>
@@ -2203,27 +1637,27 @@ export default function PronunciationPage() {
                         : "Select a phrase"}
                     </p>
                     <p className="text-[11px] text-gray-400">
-                      {filteredTemplates.length} phrase
-                      {filteredTemplates.length !== 1 ? "s" : ""}
+                      {catTpl.filteredTemplates.length} phrase
+                      {catTpl.filteredTemplates.length !== 1 ? "s" : ""}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => openNewTemplateForm(true)}
+                      onClick={() => catTpl.openNewTemplateForm(true)}
                       className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold border border-purple-200 bg-purple-50 text-purple-500 transition"
                     >
                       + New
                     </button>
                     <button
-                      onClick={() => setFavoritesOnly((v) => !v)}
+                      onClick={() => catTpl.setFavoritesOnly((v) => !v)}
                       className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${
-                        favoritesOnly
+                        catTpl.favoritesOnly
                           ? "bg-amber-50 border-amber-300 text-amber-600"
                           : "bg-gray-50 border-gray-200 text-gray-400"
                       }`}
                     >
-                      {favoritesOnly ? "★" : "☆"} Fav
+                      {catTpl.favoritesOnly ? "★" : "☆"} Fav
                     </button>
                     <button
                       onClick={() => setSheetOpen(false)}
@@ -2234,20 +1668,21 @@ export default function PronunciationPage() {
                   </div>
                 </div>
                 <div className="px-5 py-4 flex flex-col gap-3 pb-8">
-                  {templateLoading ? (
+                  {catTpl.templateLoading ? (
                     <p className="text-sm text-gray-400">
-                      Loading templates...
+                      Loading catTpl.templates...
                     </p>
-                  ) : filteredTemplates.length === 0 ? (
+                  ) : catTpl.filteredTemplates.length === 0 ? (
                     <p className="text-sm text-gray-400">
-                      {favoritesOnly
-                        ? "No favorites yet."
-                        : "No templates yet."}
+                      {catTpl.favoritesOnly
+                        ? "No catTpl.favorites yet."
+                        : "No catTpl.templates yet."}
                     </p>
                   ) : (
-                    filteredTemplates.map((template) => {
-                      const isSelected = selectedTemplateId === template.id;
-                      const isFav = favorites.has(template.id);
+                    catTpl.filteredTemplates.map((template) => {
+                      const isSelected =
+                        catTpl.selectedTemplateId === template.id;
+                      const isFav = catTpl.favorites.has(template.id);
                       const diff = template.difficulty?.toLowerCase() ?? "";
                       const diffBadge =
                         diff === "easy"
@@ -2259,7 +1694,9 @@ export default function PronunciationPage() {
                               : "bg-gray-100 text-gray-500";
                       const diffLabel =
                         diff.charAt(0).toUpperCase() + diff.slice(1) || "—";
-                      const lastScore = templateLatestScores.get(template.id);
+                      const lastScore = catTpl.templateLatestScores.get(
+                        template.id,
+                      );
                       const dotColor =
                         lastScore == null
                           ? "bg-gray-200"
@@ -2318,7 +1755,9 @@ export default function PronunciationPage() {
                           {/* Star - always visible, outside select button */}
                           <button
                             type="button"
-                            onClick={(e) => toggleFavorite(template.id, e)}
+                            onClick={(e) =>
+                              handleToggleFavorite(template.id, e)
+                            }
                             className={`absolute top-3 right-10 text-sm transition hover:scale-125 ${isFav ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
                           >
                             {isFav ? "★" : "☆"}
@@ -2327,7 +1766,9 @@ export default function PronunciationPage() {
                           <button
                             type="button"
                             aria-label="Edit phrase"
-                            onClick={() => openEditTemplateForm(template, true)}
+                            onClick={() =>
+                              catTpl.openEditTemplateForm(template, true)
+                            }
                             className="absolute top-2.5 right-2.5 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs"
                           >
                             ✎
@@ -2340,8 +1781,8 @@ export default function PronunciationPage() {
               </>
             )}
 
-            {/* ── Sheet: categories view ── */}
-            {sheetView === "categories" && (
+            {/* ── Sheet: catTpl.categories view ── */}
+            {catTpl.sheetView === "categories" && (
               <>
                 <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-100">
                   <p className="text-base font-black text-gray-800">
@@ -2350,7 +1791,7 @@ export default function PronunciationPage() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => openNewCategoryForm(true)}
+                      onClick={() => catTpl.openNewCategoryForm(true)}
                       className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold border border-purple-200 bg-purple-50 text-purple-500 transition"
                     >
                       + New
@@ -2364,7 +1805,7 @@ export default function PronunciationPage() {
                   </div>
                 </div>
                 <div className="px-5 py-4 flex flex-col gap-2 pb-8">
-                  {categories.map((cat) => (
+                  {catTpl.categories.map((cat) => (
                     <div
                       key={cat.id}
                       className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3"
@@ -2373,8 +1814,8 @@ export default function PronunciationPage() {
                         type="button"
                         className="flex items-center gap-3 flex-1 min-w-0 text-left"
                         onClick={() => {
-                          setSelectedCategoryId(cat.id);
-                          setSheetView("phrases");
+                          catTpl.selectCategory(cat.id);
+                          catTpl.setSheetView("phrases");
                         }}
                       >
                         <span className="text-xl w-6 text-center shrink-0">
@@ -2387,7 +1828,7 @@ export default function PronunciationPage() {
                       <button
                         type="button"
                         aria-label={`Edit ${cat.displayName}`}
-                        onClick={() => openEditCategoryForm(cat, true)}
+                        onClick={() => catTpl.openEditCategoryForm(cat, true)}
                         className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs shrink-0"
                       >
                         ✎
@@ -2399,17 +1840,17 @@ export default function PronunciationPage() {
             )}
 
             {/* ── Sheet: phrase-form view ── */}
-            {sheetView === "phrase-form" && (
+            {catTpl.sheetView === "phrase-form" && (
               <>
                 <div className="flex items-center gap-3 px-5 pb-3 border-b border-gray-100">
                   <button
-                    onClick={() => setSheetView("phrases")}
+                    onClick={() => catTpl.setSheetView("phrases")}
                     className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs shrink-0"
                   >
                     ←
                   </button>
                   <p className="text-base font-black text-gray-800">
-                    {editingTemplateId ? "Edit phrase" : "New phrase"}
+                    {catTpl.editingTemplateId ? "Edit phrase" : "New phrase"}
                   </p>
                 </div>
                 <div className="px-5 py-4 flex flex-col gap-3 pb-8">
@@ -2419,13 +1860,15 @@ export default function PronunciationPage() {
                       Category
                     </label>
                     <div className="grid grid-cols-2 gap-2">
-                      {categories.map((cat) => (
+                      {catTpl.categories.map((cat) => (
                         <button
                           key={cat.id}
                           type="button"
-                          onClick={() => setTemplateFormCategoryId(cat.id)}
+                          onClick={() =>
+                            catTpl.setTemplateFormCategoryId(cat.id)
+                          }
                           className={`rounded-xl border-2 px-3 py-2.5 text-left text-sm font-bold transition ${
-                            templateFormCategoryId === cat.id
+                            catTpl.templateFormCategoryId === cat.id
                               ? "border-purple-300 bg-purple-50 text-purple-700"
                               : "border-gray-100 bg-gray-50 text-gray-500"
                           }`}
@@ -2443,8 +1886,10 @@ export default function PronunciationPage() {
                     </label>
                     <input
                       type="text"
-                      value={templateFormTitle}
-                      onChange={(e) => setTemplateFormTitle(e.target.value)}
+                      value={catTpl.templateFormTitle}
+                      onChange={(e) =>
+                        catTpl.setTemplateFormTitle(e.target.value)
+                      }
                       placeholder="e.g. Why Australia"
                       className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
                     />
@@ -2456,8 +1901,10 @@ export default function PronunciationPage() {
                       Phrase text
                     </label>
                     <textarea
-                      value={templateFormText}
-                      onChange={(e) => setTemplateFormText(e.target.value)}
+                      value={catTpl.templateFormText}
+                      onChange={(e) =>
+                        catTpl.setTemplateFormText(e.target.value)
+                      }
                       placeholder="e.g. I've always wanted to..."
                       rows={4}
                       className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition resize-none"
@@ -2475,12 +1922,12 @@ export default function PronunciationPage() {
                           key={d}
                           type="button"
                           onClick={() =>
-                            setTemplateFormDifficulty(
-                              templateFormDifficulty === d ? "" : d,
+                            catTpl.setTemplateFormDifficulty(
+                              catTpl.templateFormDifficulty === d ? "" : d,
                             )
                           }
                           className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition ${
-                            templateFormDifficulty === d
+                            catTpl.templateFormDifficulty === d
                               ? d === "easy"
                                 ? "border-emerald-300 bg-emerald-50 text-emerald-700"
                                 : d === "medium"
@@ -2498,25 +1945,27 @@ export default function PronunciationPage() {
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => setSheetView("phrases")}
+                      onClick={() => catTpl.setSheetView("phrases")}
                       className="flex-1 rounded-xl border border-gray-200 text-gray-500 text-sm font-bold py-3 transition"
                     >
                       Cancel
                     </button>
                     <button
                       type="button"
-                      onClick={handleSaveTemplate}
-                      disabled={!templateFormText.trim()}
+                      onClick={catTpl.handleSaveTemplate}
+                      disabled={!catTpl.templateFormText.trim()}
                       className="flex-2 rounded-xl bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-white text-sm font-bold py-3 transition"
                     >
                       Save
                     </button>
                   </div>
 
-                  {editingTemplateId && (
+                  {catTpl.editingTemplateId && (
                     <button
                       type="button"
-                      onClick={() => handleDeleteTemplate(editingTemplateId)}
+                      onClick={() =>
+                        catTpl.handleDeleteTemplate(catTpl.editingTemplateId!)
+                      }
                       className="w-full rounded-xl border border-red-200 text-red-400 text-sm font-bold py-2.5 transition"
                     >
                       Delete phrase
@@ -2527,17 +1976,19 @@ export default function PronunciationPage() {
             )}
 
             {/* ── Sheet: category-form view ── */}
-            {sheetView === "category-form" && (
+            {catTpl.sheetView === "category-form" && (
               <>
                 <div className="flex items-center gap-3 px-5 pb-3 border-b border-gray-100">
                   <button
-                    onClick={() => setSheetView("categories")}
+                    onClick={() => catTpl.setSheetView("categories")}
                     className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs shrink-0"
                   >
                     ←
                   </button>
                   <p className="text-base font-black text-gray-800">
-                    {editingCategoryId ? "Edit category" : "New category"}
+                    {catTpl.editingCategoryId
+                      ? "Edit category"
+                      : "New category"}
                   </p>
                 </div>
                 <div className="px-5 py-4 flex flex-col gap-3 pb-8">
@@ -2547,8 +1998,10 @@ export default function PronunciationPage() {
                     </label>
                     <input
                       type="text"
-                      value={categoryFormName}
-                      onChange={(e) => setCategoryFormName(e.target.value)}
+                      value={catTpl.categoryFormName}
+                      onChange={(e) =>
+                        catTpl.setCategoryFormName(e.target.value)
+                      }
                       placeholder="e.g. Business"
                       className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
                     />
@@ -2559,24 +2012,30 @@ export default function PronunciationPage() {
                     </label>
                     <input
                       type="text"
-                      value={categoryFormDesc}
-                      onChange={(e) => setCategoryFormDesc(e.target.value)}
+                      value={catTpl.categoryFormDesc}
+                      onChange={(e) =>
+                        catTpl.setCategoryFormDesc(e.target.value)
+                      }
                       placeholder="Short description"
                       className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition"
                     />
                   </div>
                   <button
                     type="button"
-                    onClick={handleSaveCategory}
-                    disabled={!categoryFormName.trim()}
+                    onClick={catTpl.handleSaveCategory}
+                    disabled={!catTpl.categoryFormName.trim()}
                     className="w-full rounded-xl bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-white text-sm font-bold py-3 transition"
                   >
-                    {editingCategoryId ? "Save changes" : "Create category"}
+                    {catTpl.editingCategoryId
+                      ? "Save changes"
+                      : "Create category"}
                   </button>
-                  {editingCategoryId && (
+                  {catTpl.editingCategoryId && (
                     <button
                       type="button"
-                      onClick={() => handleDeleteCategory(editingCategoryId)}
+                      onClick={() =>
+                        catTpl.handleDeleteCategory(catTpl.editingCategoryId!)
+                      }
                       className="w-full rounded-xl border border-red-200 text-red-400 hover:bg-red-50 text-sm font-bold py-2.5 transition"
                     >
                       Delete category
@@ -2589,9 +2048,9 @@ export default function PronunciationPage() {
         </div>
       )}
       {/* ── Toast: template moved ── */}
-      {templateMovedToast && (
+      {catTpl.templateMovedToast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl bg-gray-800 text-white text-sm font-semibold shadow-lg whitespace-nowrap">
-          {templateMovedToast}
+          {catTpl.templateMovedToast}
         </div>
       )}
     </div>
