@@ -7,9 +7,8 @@ import { SentenceTemplate } from "@/lib/api/sentenceTemplates";
 import { generateTemplateSampleAudio } from "@/lib/api/tts";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
 import { useCategoryTemplateManager } from "@/hooks/pronunciation/useCategoryTemplateManager";
+import { useRecordingSession } from "@/hooks/pronunciation/useRecordingSession";
 
-const MIC_AUTO_RELEASE_MS = 90_000;
-const RECORDING_MAX_MS = 35_000;
 const MAX_SAMPLE_AUDIO_CACHE_ITEMS = 20;
 
 type CachedSampleAudio = {
@@ -141,11 +140,7 @@ function Card({
 
 // ═════════════════════════════════════════════════════════════
 export default function PronunciationPage() {
-  // ── Recording / scoring state ─────────────────────────────
-  const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isMicReady, setIsMicReady] = useState(false);
+  // ── Scoring state ─────────────────────────────────────────
   const [result, setResult] = useState<SpeechEvaluateResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [ttsLoading, setTtsLoading] = useState(false);
@@ -166,13 +161,6 @@ export default function PronunciationPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   // ── Refs ──────────────────────────────────────────────────
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const recordingStreamRef = useRef<MediaStream | null>(null);
-  const recordedChunksRef = useRef<Float32Array[]>([]);
-  const releaseTimerRef = useRef<number | null>(null);
-  const recordingLimitTimerRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const myVoiceRef = useRef<HTMLAudioElement>(null);
   const sampleAudioCacheRef = useRef<Map<string, CachedSampleAudio>>(new Map());
@@ -246,58 +234,22 @@ export default function PronunciationPage() {
     reportError: setErrorMessage,
   });
 
-  // ── Mic helpers ───────────────────────────────────────────
-  const clearRecordingLimitTimer = () => {
-    if (recordingLimitTimerRef.current) {
-      window.clearTimeout(recordingLimitTimerRef.current);
-      recordingLimitTimerRef.current = null;
-    }
-  };
+  const recording = useRecordingSession({
+    canRecord: catTpl.selectedTemplate !== null,
+    onRecordingStart: () => {
+      setResult(null);
+      setScored(false);
+    },
+    reportError: setErrorMessage,
+  });
 
-  const releaseMicrophone = () => {
-    clearRecordingLimitTimer();
-
-    if (releaseTimerRef.current) {
-      window.clearTimeout(releaseTimerRef.current);
-      releaseTimerRef.current = null;
-    }
-    processorRef.current?.disconnect();
-    processorRef.current = null;
-    sourceRef.current?.disconnect();
-    sourceRef.current = null;
-    recordingStreamRef.current?.getTracks().forEach((t) => t.stop());
-    recordingStreamRef.current = null;
-    setIsMicReady(false);
-    setIsRecording(false);
-  };
-
-  const scheduleMicRelease = () => {
-    if (releaseTimerRef.current) window.clearTimeout(releaseTimerRef.current);
-    releaseTimerRef.current = window.setTimeout(
-      () => releaseMicrophone(),
-      MIC_AUTO_RELEASE_MS,
-    );
-  };
-
+  // ── Sample-audio cache cleanup on unmount ─────────────────
+  // (Recording resources are torn down inside useRecordingSession.)
   useEffect(() => {
     const sampleAudioCache = sampleAudioCacheRef.current;
     const sampleAudioLoading = sampleAudioLoadingRef.current;
 
     return () => {
-      clearRecordingLimitTimer();
-
-      if (releaseTimerRef.current) {
-        window.clearTimeout(releaseTimerRef.current);
-      }
-
-      processorRef.current?.disconnect();
-      sourceRef.current?.disconnect();
-      recordingStreamRef.current?.getTracks().forEach((t) => t.stop());
-
-      if (audioContextRef.current) {
-        void audioContextRef.current.close();
-      }
-
       sampleAudioCache.forEach((cached) => {
         URL.revokeObjectURL(cached.url);
       });
@@ -305,168 +257,6 @@ export default function PronunciationPage() {
       sampleAudioLoading.clear();
     };
   }, []);
-
-  // ── Recording ─────────────────────────────────────────────
-  const handleStartRecording = async () => {
-    if (!selectedTemplate) {
-      setErrorMessage("Please select a sentence first.");
-      return;
-    }
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setErrorMessage("Microphone recording is not supported in this browser.");
-      return;
-    }
-    try {
-      setErrorMessage("");
-      setResult(null);
-      recordedChunksRef.current = [];
-      setScored(false);
-      if (releaseTimerRef.current) {
-        window.clearTimeout(releaseTimerRef.current);
-        releaseTimerRef.current = null;
-      }
-      if (!recordingStreamRef.current)
-        recordingStreamRef.current = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
-      if (
-        !audioContextRef.current ||
-        audioContextRef.current.state === "closed"
-      )
-        audioContextRef.current = new AudioContext();
-      if (audioContextRef.current.state === "suspended")
-        await audioContextRef.current.resume();
-      processorRef.current?.disconnect();
-      sourceRef.current?.disconnect();
-      const source = audioContextRef.current.createMediaStreamSource(
-        recordingStreamRef.current,
-      );
-      sourceRef.current = source;
-      const processor = audioContextRef.current.createScriptProcessor(
-        4096,
-        1,
-        1,
-      );
-      processorRef.current = processor;
-      processor.onaudioprocess = (e) =>
-        recordedChunksRef.current.push(
-          new Float32Array(e.inputBuffer.getChannelData(0)),
-        );
-      source.connect(processor);
-      processor.connect(audioContextRef.current.destination);
-      setAudioFile(null);
-      setRecordedAudioUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
-      setIsMicReady(true);
-      setIsRecording(true);
-
-      clearRecordingLimitTimer();
-      recordingLimitTimerRef.current = window.setTimeout(() => {
-        recordingLimitTimerRef.current = null;
-        handleStopRecording();
-      }, RECORDING_MAX_MS);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to start microphone recording.",
-      );
-    }
-  };
-
-  const TARGET_SAMPLE_RATE = 16000;
-
-  const mergeAudioChunks = (chunks: Float32Array[]) => {
-    const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
-    const merged = new Float32Array(totalLength);
-    let offset = 0;
-    for (const chunk of chunks) {
-      merged.set(chunk, offset);
-      offset += chunk.length;
-    }
-    return merged;
-  };
-
-  const resampleAudio = (data: Float32Array, from: number, to: number) => {
-    if (from === to) return data;
-    const ratio = from / to;
-    const newLen = Math.round(data.length / ratio);
-    const out = new Float32Array(newLen);
-    for (let i = 0; i < newLen; i++) {
-      const si = i * ratio;
-      const ib = Math.floor(si);
-      const ia = Math.min(ib + 1, data.length - 1);
-      const w = si - ib;
-      out[i] = data[ib] * (1 - w) + data[ia] * w;
-    }
-    return out;
-  };
-
-  const encodeWav = (samples: Float32Array, sampleRate: number) => {
-    const bytesPerSample = 2,
-      numChannels = 1;
-    const blockAlign = numChannels * bytesPerSample;
-    const byteRate = sampleRate * blockAlign;
-    const dataSize = samples.length * bytesPerSample;
-    const buffer = new ArrayBuffer(44 + dataSize);
-    const view = new DataView(buffer);
-    const ws = (offset: number, value: string) => {
-      for (let i = 0; i < value.length; i++)
-        view.setUint8(offset + i, value.charCodeAt(i));
-    };
-    ws(0, "RIFF");
-    view.setUint32(4, 36 + dataSize, true);
-    ws(8, "WAVE");
-    ws(12, "fmt ");
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, numChannels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, byteRate, true);
-    view.setUint16(32, blockAlign, true);
-    view.setUint16(34, 16, true);
-    ws(36, "data");
-    view.setUint32(40, dataSize, true);
-    let offset = 44;
-    for (const s of samples) {
-      const c = Math.max(-1, Math.min(1, s));
-      view.setInt16(offset, c < 0 ? c * 0x8000 : c * 0x7fff, true);
-      offset += 2;
-    }
-    return new Blob([view], { type: "audio/wav" });
-  };
-
-  const handleStopRecording = () => {
-    clearRecordingLimitTimer();
-
-    if (!audioContextRef.current || recordedChunksRef.current.length === 0) {
-      setIsRecording(false);
-      scheduleMicRelease();
-      return;
-    }
-
-    const sr = audioContextRef.current.sampleRate;
-    const merged = mergeAudioChunks(recordedChunksRef.current);
-    const resampled = resampleAudio(merged, sr, TARGET_SAMPLE_RATE);
-    const wavBlob = encodeWav(resampled, TARGET_SAMPLE_RATE);
-    const wavFile = new File([wavBlob], `recording-${Date.now()}.wav`, {
-      type: "audio/wav",
-    });
-    processorRef.current?.disconnect();
-    processorRef.current = null;
-    sourceRef.current?.disconnect();
-    sourceRef.current = null;
-    setAudioFile(wavFile);
-    setRecordedAudioUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return URL.createObjectURL(wavBlob);
-    });
-    setIsRecording(false);
-    scheduleMicRelease();
-  };
 
   // ── TTS: generate then auto-play ──────────────────────────
   const handlePlaySample = async () => {
@@ -523,7 +313,7 @@ export default function PronunciationPage() {
 
   // ── Scoring ───────────────────────────────────────────────
   const handleSubmit = async () => {
-    if (!audioFile) {
+    if (!recording.audioFile) {
       setErrorMessage("Please record audio or select an audio file.");
       setResult(null);
       return;
@@ -538,7 +328,7 @@ export default function PronunciationPage() {
       setErrorMessage("");
       const scoringText = selectedTemplate?.scoringText ?? catTpl.referenceText;
       const response = await scorePronunciation(
-        audioFile,
+        recording.audioFile,
         scoringText,
         selectedTemplate?.id,
       );
@@ -556,6 +346,22 @@ export default function PronunciationPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Domain-level guard lives here (not in the hook): "you must pick a
+  // sentence before recording" is a page concern. The hook only knows a
+  // boolean `canRecord` and stays silent when it's false.
+  const handleRecordClick = () => {
+    if (recording.isRecording) {
+      recording.stopRecording();
+      return;
+    }
+    if (!selectedTemplate) {
+      setErrorMessage("Please select a sentence first.");
+      return;
+    }
+    setErrorMessage("");
+    void recording.startRecording();
   };
 
   const getPhonemesByWord = (word: string) => {
@@ -1273,21 +1079,21 @@ export default function PronunciationPage() {
                 <p className="text-[10px] font-bold tracking-widest uppercase text-purple-300">
                   Record
                 </p>
-                {isMicReady && !isRecording && (
+                {recording.isMicReady && !recording.isRecording && (
                   <div className="flex items-center gap-2">
                     <span className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-semibold">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
                       Mic ready
                     </span>
                     <button
-                      onClick={releaseMicrophone}
+                      onClick={recording.releaseMicrophone}
                       className="text-[11px] text-gray-400 border border-gray-200 rounded-md px-2 py-0.5 hover:text-gray-600 hover:border-gray-300 transition"
                     >
                       Turn off
                     </button>
                   </div>
                 )}
-                {isRecording && (
+                {recording.isRecording && (
                   <span className="flex items-center gap-1.5 text-[11px] font-semibold text-red-500 animate-pulse">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
                     Recording…
@@ -1304,7 +1110,7 @@ export default function PronunciationPage() {
               {/* Hidden audio element for recorded voice playback */}
               <audio
                 ref={myVoiceRef}
-                src={recordedAudioUrl ?? undefined}
+                src={recording.recordedAudioUrl ?? undefined}
                 className="hidden"
                 onPlay={() => setIsMyVoicePlaying(true)}
                 onPause={() => setIsMyVoicePlaying(false)}
@@ -1323,17 +1129,15 @@ export default function PronunciationPage() {
               <div className="flex items-center gap-3 flex-wrap">
                 {/* Record / Stop toggle */}
                 <button
-                  onClick={
-                    isRecording ? handleStopRecording : handleStartRecording
-                  }
+                  onClick={handleRecordClick}
                   disabled={loading}
                   className={`flex items-center gap-2.5 px-5 py-3 rounded-xl text-sm font-bold text-white transition hover:scale-105 disabled:opacity-50 ${
-                    isRecording
+                    recording.isRecording
                       ? "bg-linear-to-r from-red-400 to-red-500"
                       : "bg-linear-to-r from-pink-300 to-violet-400"
                   }`}
                 >
-                  {isRecording ? (
+                  {recording.isRecording ? (
                     <>
                       <span className="w-3.5 h-3.5 rounded-sm bg-white opacity-90 shrink-0" />
                       Stop
@@ -1349,7 +1153,9 @@ export default function PronunciationPage() {
                 {/* Score button */}
                 <button
                   onClick={handleSubmit}
-                  disabled={loading || isRecording || !audioFile || scored}
+                  disabled={
+                    loading || recording.isRecording || !recording.audioFile || scored
+                  }
                   className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold text-white bg-linear-to-r from-violet-400 to-indigo-400 hover:scale-105 transition disabled:opacity-40"
                 >
                   {loading ? (
@@ -1376,7 +1182,7 @@ export default function PronunciationPage() {
                 </button>
 
                 {/* My voice mini-player — appears after recording */}
-                {recordedAudioUrl && (
+                {recording.recordedAudioUrl && (
                   <div className="inline-flex items-center gap-2 pl-2 pr-3 py-2 rounded-full bg-linear-to-r from-pink-100 to-rose-100">
                     <button
                       onClick={() => {
