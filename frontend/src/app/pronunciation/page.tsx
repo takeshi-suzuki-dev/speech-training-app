@@ -584,6 +584,13 @@ export default function PronunciationPage() {
   const selectedTemplate = catTpl.selectedTemplate;
   const hasSelectedTemplate = selectedTemplate !== null;
 
+  // Reset scoring state whenever the selected template changes
+  useEffect(() => {
+    setResult(null);
+    setScored(false);
+    setExpandedWord(null);
+  }, [catTpl.selectedTemplateId]);
+
   useEffect(() => {
     if (!selectedTemplate) {
       return;
