@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // ── Timing constants ─────────────────────────────────────────
 const MIC_AUTO_RELEASE_MS = 90_000;
@@ -97,6 +97,13 @@ export type RecordingSession = {
   startRecording: () => Promise<void>;
   stopRecording: () => void;
   releaseMicrophone: () => void;
+  /**
+   * Discard the captured recording (audioFile + its playback URL) without
+   * touching the live mic. Call when the recording is no longer relevant —
+   * e.g. the selected sentence changed. Stable identity (safe as an effect
+   * dependency).
+   */
+  reset: () => void;
 };
 
 export function useRecordingSession({
@@ -271,6 +278,17 @@ export function useRecordingSession({
     stopRecordingRef.current = stopRecording;
   });
 
+  // Discard the captured recording without releasing the mic. Uses only
+  // functional setState updaters so it can be a stable ([]) callback — safe to
+  // pass as an effect dependency in the consumer.
+  const reset = useCallback(() => {
+    setAudioFile(null);
+    setRecordedAudioUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+  }, []);
+
   // ── Unmount cleanup: tear down all recording resources ─────
   useEffect(() => {
     return () => {
@@ -298,5 +316,6 @@ export function useRecordingSession({
     startRecording,
     stopRecording,
     releaseMicrophone,
+    reset,
   };
 }

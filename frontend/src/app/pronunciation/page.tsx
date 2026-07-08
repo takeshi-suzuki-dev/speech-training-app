@@ -242,6 +242,7 @@ export default function PronunciationPage() {
     },
     reportError: setErrorMessage,
   });
+  const { reset: resetRecording } = recording;
 
   // ── Sample-audio cache cleanup on unmount ─────────────────
   // (Recording resources are torn down inside useRecordingSession.)
@@ -390,12 +391,15 @@ export default function PronunciationPage() {
   const selectedTemplate = catTpl.selectedTemplate;
   const hasSelectedTemplate = selectedTemplate !== null;
 
-  // Reset scoring state whenever the selected template changes
+  // Reset scoring state and discard any recording whenever the selected
+  // template changes. Without the recording.reset(), the previous sentence's
+  // "My voice" player and captured audioFile stayed around after switching.
   useEffect(() => {
     setResult(null);
     setScored(false);
     setExpandedWord(null);
-  }, [catTpl.selectedTemplateId]);
+    resetRecording();
+  }, [catTpl.selectedTemplateId, resetRecording]);
 
   useEffect(() => {
     if (!selectedTemplate) {
