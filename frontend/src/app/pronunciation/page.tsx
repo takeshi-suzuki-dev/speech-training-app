@@ -1,21 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import AppNav from "@/components/AppNav";
 import { scorePronunciation } from "@/lib/api/pronunciationAssessment";
 import { SentenceTemplate } from "@/lib/api/sentenceTemplates";
-import { generateTemplateSampleAudio } from "@/lib/api/tts";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
 import { useCategoryTemplateManager } from "@/hooks/pronunciation/useCategoryTemplateManager";
 import { useRecordingSession } from "@/hooks/pronunciation/useRecordingSession";
-
-const MAX_SAMPLE_AUDIO_CACHE_ITEMS = 20;
-
-type CachedSampleAudio = {
-  url: string;
-  size: number;
-  lastUsedAt: number;
-};
+import { useSampleAudioPlayer } from "@/hooks/pronunciation/useSampleAudioPlayer";
 
 // ── Static data ──────────────────────────────────────────────
 const getCategoryIcon = (categoryKey: string | null) => {
@@ -27,44 +19,6 @@ const getCategoryIcon = (categoryKey: string | null) => {
 };
 
 // ── Helpers ──────────────────────────────────────────────────
-function buildSampleAudioCacheKey(template: SentenceTemplate): string {
-  return `${template.id}:${template.sampleAudioText}`;
-}
-
-function evictOldSampleAudioCache(cache: Map<string, CachedSampleAudio>): void {
-  if (cache.size <= MAX_SAMPLE_AUDIO_CACHE_ITEMS) {
-    return;
-  }
-
-  const entriesByOldest = [...cache.entries()].sort(
-    ([, a], [, b]) => a.lastUsedAt - b.lastUsedAt,
-  );
-
-  while (cache.size > MAX_SAMPLE_AUDIO_CACHE_ITEMS) {
-    const nextEviction = entriesByOldest.shift();
-
-    if (!nextEviction) {
-      return;
-    }
-
-    const [cacheKey, cached] = nextEviction;
-    URL.revokeObjectURL(cached.url);
-    cache.delete(cacheKey);
-  }
-}
-
-function removeCachedSampleAudioForTemplate(
-  cache: Map<string, CachedSampleAudio>,
-  templateId: string,
-): void {
-  for (const [cacheKey, cached] of cache.entries()) {
-    if (cacheKey.startsWith(`${templateId}:`)) {
-      URL.revokeObjectURL(cached.url);
-      cache.delete(cacheKey);
-    }
-  }
-}
-
 const scoreTextColor = (score: number) => {
   if (score >= 80) return "text-emerald-600";
   if (score >= 60) return "text-amber-500";
@@ -143,15 +97,9 @@ export default function PronunciationPage() {
   // ── Scoring state ─────────────────────────────────────────
   const [result, setResult] = useState<SpeechEvaluateResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [ttsLoading, setTtsLoading] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [expandedWord, setExpandedWord] = useState<number | null>(null);
   const [scored, setScored] = useState(false);
-  // ── Audio player state (TTS / Roger) ─────────────────────
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   // ── Audio player state (my voice) ────────────────────────
   const [isMyVoicePlaying, setIsMyVoicePlaying] = useState(false);
   const [myVoiceCurrentTime, setMyVoiceCurrentTime] = useState(0);
@@ -161,76 +109,18 @@ export default function PronunciationPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   // ── Refs ──────────────────────────────────────────────────
-  const audioRef = useRef<HTMLAudioElement>(null);
   const myVoiceRef = useRef<HTMLAudioElement>(null);
-  const sampleAudioCacheRef = useRef<Map<string, CachedSampleAudio>>(new Map());
-  const sampleAudioLoadingRef = useRef<Map<string, Promise<string>>>(new Map());
-  const pendingSampleAudioAutoPlayRef = useRef(false);
 
-  const resetSampleAudioState = useCallback(() => {
-    pendingSampleAudioAutoPlayRef.current = false;
-
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.removeAttribute("src");
-      audioRef.current.load();
-    }
-
-    setAudioUrl(null);
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
-    setTtsLoading(false);
-  }, []);
-
-  const getOrCreateSampleAudioUrl = useCallback(
-    async (template: SentenceTemplate): Promise<string> => {
-      const cacheKey = buildSampleAudioCacheKey(template);
-      const cached = sampleAudioCacheRef.current.get(cacheKey);
-
-      if (cached) {
-        cached.lastUsedAt = Date.now();
-        return cached.url;
-      }
-
-      const loading = sampleAudioLoadingRef.current.get(cacheKey);
-
-      if (loading) {
-        return loading;
-      }
-
-      const loadingPromise = generateTemplateSampleAudio(template.id)
-        .then((audioBlob) => {
-          const objectUrl = URL.createObjectURL(audioBlob);
-
-          sampleAudioCacheRef.current.set(cacheKey, {
-            url: objectUrl,
-            size: audioBlob.size,
-            lastUsedAt: Date.now(),
-          });
-
-          evictOldSampleAudioCache(sampleAudioCacheRef.current);
-
-          return objectUrl;
-        })
-        .finally(() => {
-          sampleAudioLoadingRef.current.delete(cacheKey);
-        });
-
-      sampleAudioLoadingRef.current.set(cacheKey, loadingPromise);
-
-      return loadingPromise;
-    },
-    [],
-  );
-
-  const removeCachedAudioForTemplate = useCallback((templateId: string) => {
-    removeCachedSampleAudioForTemplate(sampleAudioCacheRef.current, templateId);
-  }, []);
+  // Sample-audio player (TTS / Roger). Passive: the page decides *when* to
+  // preload (effect below); the hook owns generation, caching and playback.
+  const player = useSampleAudioPlayer({
+    reportError: setErrorMessage,
+  });
+  const { preload: preloadSampleAudio } = player;
 
   const catTpl = useCategoryTemplateManager({
-    resetSampleAudioState,
-    removeCachedAudioForTemplate,
+    resetSampleAudioState: player.resetState,
+    removeCachedAudioForTemplate: player.removeCachedForTemplate,
     reportError: setErrorMessage,
   });
 
@@ -244,73 +134,11 @@ export default function PronunciationPage() {
   });
   const { reset: resetRecording } = recording;
 
-  // ── Sample-audio cache cleanup on unmount ─────────────────
-  // (Recording resources are torn down inside useRecordingSession.)
-  useEffect(() => {
-    const sampleAudioCache = sampleAudioCacheRef.current;
-    const sampleAudioLoading = sampleAudioLoadingRef.current;
-
-    return () => {
-      sampleAudioCache.forEach((cached) => {
-        URL.revokeObjectURL(cached.url);
-      });
-      sampleAudioCache.clear();
-      sampleAudioLoading.clear();
-    };
-  }, []);
-
-  // ── TTS: generate then auto-play ──────────────────────────
-  const handlePlaySample = async () => {
-    if (!selectedTemplate) {
-      setErrorMessage("Please select a sentence first.");
-      return;
-    }
-
-    if (audioUrl && audioRef.current) {
-      if (audioRef.current.paused) {
-        void audioRef.current.play();
-      } else {
-        audioRef.current.pause();
-      }
-      return;
-    }
-
-    if (!catTpl.referenceText.trim()) {
-      setErrorMessage("Please enter reference text.");
-      return;
-    }
-
-    try {
-      setTtsLoading(true);
-      setErrorMessage("");
-
-      const objectUrl = await getOrCreateSampleAudioUrl(selectedTemplate);
-
-      pendingSampleAudioAutoPlayRef.current = true;
-      setAudioUrl(objectUrl);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to load sample audio.",
-      );
-    } finally {
-      setTtsLoading(false);
-    }
+  // ── TTS: play sample (generate + auto-play, or toggle) ────
+  const handlePlaySample = () => {
+    setErrorMessage("");
+    void player.playSample(catTpl.selectedTemplate, catTpl.referenceText);
   };
-
-  useEffect(() => {
-    if (!audioUrl || !audioRef.current) {
-      return;
-    }
-
-    audioRef.current.load();
-
-    if (!pendingSampleAudioAutoPlayRef.current) {
-      return;
-    }
-
-    pendingSampleAudioAutoPlayRef.current = false;
-    void audioRef.current.play();
-  }, [audioUrl]);
 
   // ── Scoring ───────────────────────────────────────────────
   const handleSubmit = async () => {
@@ -401,47 +229,14 @@ export default function PronunciationPage() {
     resetRecording();
   }, [catTpl.selectedTemplateId, resetRecording]);
 
+  // Preload the sample audio whenever the selected template changes. The page
+  // owns the *timing* (this effect); the hook owns generation/caching/loading.
   useEffect(() => {
     if (!selectedTemplate) {
       return;
     }
-
-    let ignore = false;
-
-    const preloadSampleAudio = async () => {
-      try {
-        setTtsLoading(true);
-        setErrorMessage("");
-
-        const objectUrl = await getOrCreateSampleAudioUrl(selectedTemplate);
-
-        if (ignore) {
-          return;
-        }
-
-        pendingSampleAudioAutoPlayRef.current = false;
-        setAudioUrl(objectUrl);
-      } catch (error) {
-        if (!ignore) {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "Failed to prepare sample audio.",
-          );
-        }
-      } finally {
-        if (!ignore) {
-          setTtsLoading(false);
-        }
-      }
-    };
-
-    void preloadSampleAudio();
-
-    return () => {
-      ignore = true;
-    };
-  }, [selectedTemplate, getOrCreateSampleAudioUrl]);
+    void preloadSampleAudio(selectedTemplate);
+  }, [selectedTemplate, preloadSampleAudio]);
 
   // ── Time formatter ────────────────────────────────────────
   const formatTime = (sec: number) => {
@@ -946,37 +741,21 @@ export default function PronunciationPage() {
               {catTpl.referenceText}
             </p>
 
-            {/* Audio element — hidden, controlled via state */}
-            <audio
-              ref={audioRef}
-              src={audioUrl ?? undefined}
-              className="hidden"
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              onEnded={() => {
-                setIsPlaying(false);
-                setCurrentTime(0);
-              }}
-              onTimeUpdate={() =>
-                setCurrentTime(audioRef.current?.currentTime ?? 0)
-              }
-              onLoadedMetadata={() =>
-                setDuration(audioRef.current?.duration ?? 0)
-              }
-            />
+            {/* Audio element — hidden, controlled via the player hook */}
+            <audio {...player.audioProps} className="hidden" />
 
             <div className="flex flex-wrap items-center gap-3">
               {/* Play sample pill — morphs into inline player after generation */}
               {hasSelectedTemplate && (
                 <>
-                  {!audioUrl ? (
+                  {!player.audioUrl ? (
                     <button
                       onClick={handlePlaySample}
-                      disabled={ttsLoading}
+                      disabled={player.ttsLoading}
                       className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold text-purple-700 bg-linear-to-r from-blue-100 to-purple-100 hover:scale-105 transition disabled:opacity-50"
                     >
                       <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0">
-                        {ttsLoading ? (
+                        {player.ttsLoading ? (
                           <svg
                             className="animate-spin w-3 h-3 text-purple-400"
                             viewBox="0 0 24 24"
@@ -997,7 +776,9 @@ export default function PronunciationPage() {
                           </svg>
                         )}
                       </div>
-                      {ttsLoading ? "Generating…" : "Play sample · Roger"}
+                      {player.ttsLoading
+                        ? "Generating…"
+                        : "Play sample · Roger"}
                     </button>
                   ) : (
                     /* ── Inline mini-player pill ── */
@@ -1007,7 +788,7 @@ export default function PronunciationPage() {
                         onClick={handlePlaySample}
                         className="w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0 hover:scale-110 transition"
                       >
-                        {isPlaying ? (
+                        {player.isPlaying ? (
                           /* Pause icon */
                           <svg
                             width="9"
@@ -1036,23 +817,14 @@ export default function PronunciationPage() {
                         <input
                           type="range"
                           min={0}
-                          max={duration || 1}
+                          max={player.duration || 1}
                           step={0.01}
-                          value={currentTime}
-                          onChange={(e) => {
-                            const t = Number(e.target.value);
-                            setCurrentTime(t);
-
-                            const audio = audioRef.current;
-                            if (!audio) return;
-
-                            audio.currentTime = t;
-                            void audio.play();
-                          }}
+                          value={player.currentTime}
+                          onChange={(e) => player.seek(Number(e.target.value))}
                           className="w-24 h-1 accent-violet-400 cursor-pointer"
                         />
                         <span className="text-[10px] font-mono text-purple-500 w-8 text-right tabular-nums">
-                          {formatTime(currentTime)}
+                          {formatTime(player.currentTime)}
                         </span>
                       </div>
 
@@ -1158,7 +930,10 @@ export default function PronunciationPage() {
                 <button
                   onClick={handleSubmit}
                   disabled={
-                    loading || recording.isRecording || !recording.audioFile || scored
+                    loading ||
+                    recording.isRecording ||
+                    !recording.audioFile ||
+                    scored
                   }
                   className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold text-white bg-linear-to-r from-violet-400 to-indigo-400 hover:scale-105 transition disabled:opacity-40"
                 >
