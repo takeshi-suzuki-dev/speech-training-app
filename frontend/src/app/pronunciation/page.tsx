@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import AppNav from "@/components/AppNav";
-import { scorePronunciation } from "@/lib/api/pronunciationAssessment";
 import { SentenceTemplate } from "@/lib/api/sentenceTemplates";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
 import { useCategoryTemplateManager } from "@/hooks/pronunciation/useCategoryTemplateManager";
 import { useRecordingSession } from "@/hooks/pronunciation/useRecordingSession";
 import { useSampleAudioPlayer } from "@/hooks/pronunciation/useSampleAudioPlayer";
+import { useScoring } from "@/hooks/pronunciation/useScoring";
 
 // ── Static data ──────────────────────────────────────────────
 const getCategoryIcon = (categoryKey: string | null) => {
@@ -94,12 +94,8 @@ function Card({
 
 // ═════════════════════════════════════════════════════════════
 export default function PronunciationPage() {
-  // ── Scoring state ─────────────────────────────────────────
-  const [result, setResult] = useState<SpeechEvaluateResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  // ── Shared error banner (fed by every hook + local validation) ─
   const [errorMessage, setErrorMessage] = useState("");
-  const [expandedWord, setExpandedWord] = useState<number | null>(null);
-  const [scored, setScored] = useState(false);
   // ── Audio player state (my voice) ────────────────────────
   const [isMyVoicePlaying, setIsMyVoicePlaying] = useState(false);
   const [myVoiceCurrentTime, setMyVoiceCurrentTime] = useState(0);
@@ -124,12 +120,17 @@ export default function PronunciationPage() {
     reportError: setErrorMessage,
   });
 
+  // Scoring (assessment run + result/scored/expandedWord). Independent of the
+  // other hooks at init; the page supplies its inputs at submit time.
+  const scoring = useScoring({ reportError: setErrorMessage });
+  const { reset: resetScoring } = scoring;
+  const { result, loading, scored, expandedWord, toggleWord, getPhonemesByWord } =
+    scoring;
+
   const recording = useRecordingSession({
     canRecord: catTpl.selectedTemplate !== null,
-    onRecordingStart: () => {
-      setResult(null);
-      setScored(false);
-    },
+    // Starting a new recording invalidates the previous score.
+    onRecordingStart: resetScoring,
     reportError: setErrorMessage,
   });
   const { reset: resetRecording } = recording;
@@ -141,41 +142,13 @@ export default function PronunciationPage() {
   };
 
   // ── Scoring ───────────────────────────────────────────────
-  const handleSubmit = async () => {
-    if (!recording.audioFile) {
-      setErrorMessage("Please record audio or select an audio file.");
-      setResult(null);
-      return;
-    }
-    if (!catTpl.referenceText.trim()) {
-      setErrorMessage("Please enter reference text.");
-      setResult(null);
-      return;
-    }
-    try {
-      setLoading(true);
-      setErrorMessage("");
-      const scoringText = selectedTemplate?.scoringText ?? catTpl.referenceText;
-      const response = await scorePronunciation(
-        recording.audioFile,
-        scoringText,
-        selectedTemplate?.id,
-      );
-      setResult(response);
-      setExpandedWord(null);
-      setScored(true);
-
-      await catTpl.refreshLatestScores();
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to evaluate pronunciation.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+  const handleSubmit = () =>
+    scoring.submit({
+      audioFile: recording.audioFile,
+      referenceText: catTpl.referenceText,
+      template: selectedTemplate,
+      onScored: catTpl.refreshLatestScores,
+    });
 
   // Domain-level guard lives here (not in the hook): "you must pick a
   // sentence before recording" is a page concern. The hook only knows a
@@ -191,13 +164,6 @@ export default function PronunciationPage() {
     }
     setErrorMessage("");
     void recording.startRecording();
-  };
-
-  const getPhonemesByWord = (word: string) => {
-    if (!result?.phonemes) return [];
-    return result.phonemes.filter(
-      (p) => p.word?.toLowerCase() === word.toLowerCase(),
-    );
   };
 
   const selectTemplate = (template: SentenceTemplate) => {
@@ -223,11 +189,9 @@ export default function PronunciationPage() {
   // template changes. Without the recording.reset(), the previous sentence's
   // "My voice" player and captured audioFile stayed around after switching.
   useEffect(() => {
-    setResult(null);
-    setScored(false);
-    setExpandedWord(null);
+    resetScoring();
     resetRecording();
-  }, [catTpl.selectedTemplateId, resetRecording]);
+  }, [catTpl.selectedTemplateId, resetScoring, resetRecording]);
 
   // Preload the sample audio whenever the selected template changes. The page
   // owns the *timing* (this effect); the hook owns generation/caching/loading.
@@ -1120,9 +1084,7 @@ export default function PronunciationPage() {
                         return (
                           <button
                             key={`${wordResult.word}-${index}`}
-                            onClick={() =>
-                              setExpandedWord(isOpen ? null : index)
-                            }
+                            onClick={() => toggleWord(index)}
                             className={`flex flex-col items-center gap-1 px-4 pt-2.5 pb-2 rounded-2xl border-2 transition hover:-translate-y-0.5 ${wordChipClass(wordScore)} ${isOpen ? "ring-2 ring-offset-1 ring-purple-300" : ""}`}
                           >
                             <span className="text-sm font-bold leading-none">
