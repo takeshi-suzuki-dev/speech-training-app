@@ -8,6 +8,7 @@ import { useCategoryTemplateManager } from "@/hooks/pronunciation/useCategoryTem
 import { useRecordingSession } from "@/hooks/pronunciation/useRecordingSession";
 import { useSampleAudioPlayer } from "@/hooks/pronunciation/useSampleAudioPlayer";
 import { useScoring } from "@/hooks/pronunciation/useScoring";
+import { TemplateCard } from "@/components/pronunciation/TemplateCard";
 
 // ── Static data ──────────────────────────────────────────────
 const getCategoryIcon = (categoryKey: string | null) => {
@@ -124,8 +125,14 @@ export default function PronunciationPage() {
   // other hooks at init; the page supplies its inputs at submit time.
   const scoring = useScoring({ reportError: setErrorMessage });
   const { reset: resetScoring } = scoring;
-  const { result, loading, scored, expandedWord, toggleWord, getPhonemesByWord } =
-    scoring;
+  const {
+    result,
+    loading,
+    scored,
+    expandedWord,
+    toggleWord,
+    getPhonemesByWord,
+  } = scoring;
 
   const recording = useRecordingSession({
     canRecord: catTpl.selectedTemplate !== null,
@@ -342,106 +349,23 @@ export default function PronunciationPage() {
                   </p>
                 ) : (
                   <div className="flex flex-col gap-2">
-                    {catTpl.filteredTemplates.map((template) => {
-                      const isSelected =
-                        catTpl.selectedTemplateId === template.id;
-                      const isFav = catTpl.favorites.has(template.id);
-                      const diff = template.difficulty?.toLowerCase() ?? "";
-                      const diffBadge =
-                        diff === "easy"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : diff === "medium"
-                            ? "bg-amber-50 text-amber-600"
-                            : diff === "hard"
-                              ? "bg-red-50 text-red-600"
-                              : "bg-gray-100 text-gray-500";
-                      const diffLabel =
-                        diff.charAt(0).toUpperCase() + diff.slice(1) || "—";
-                      const lastScore = catTpl.templateLatestScores.get(
-                        template.id,
-                      );
-                      const dotColor =
-                        lastScore == null
-                          ? "bg-gray-200"
-                          : lastScore >= 80
-                            ? "bg-emerald-400"
-                            : lastScore >= 60
-                              ? "bg-amber-400"
-                              : "bg-red-400";
-
-                      return (
-                        <div
-                          key={template.id}
-                          className={`group relative w-full rounded-xl border-2 transition ${
-                            isSelected
-                              ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50 shadow-sm"
-                              : "border-gray-100 bg-gray-50 hover:bg-purple-50 hover:border-purple-200"
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => selectTemplate(template)}
-                            className="w-full text-left px-3 py-3 pr-14"
-                          >
-                            {/* Badge + title row */}
-                            <div className="flex items-center gap-2 mb-1.5">
-                              <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${diffBadge}`}
-                              >
-                                {diffLabel}
-                              </span>
-                              {template.title && (
-                                <span className="text-[10px] font-bold text-purple-400 truncate">
-                                  {template.title}
-                                </span>
-                              )}
-                            </div>
-                            {/* Phrase text */}
-                            <p className="text-[13px] font-semibold text-gray-700 leading-snug">
-                              {template.displayText}
-                            </p>
-                            {/* Score row */}
-                            <div className="flex items-center gap-1.5 mt-1.5">
-                              <span
-                                className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
-                              />
-                              {lastScore == null ? (
-                                <span className="text-[11px] font-bold text-gray-400">
-                                  Not tried yet
-                                </span>
-                              ) : (
-                                <span
-                                  className={`text-[11px] font-bold ${lastScore >= 80 ? "text-emerald-600" : lastScore >= 60 ? "text-amber-500" : "text-red-500"}`}
-                                >
-                                  Last: {lastScore}
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                          {/* Star - always visible, outside select button */}
-                          <button
-                            type="button"
-                            onClick={(e) =>
-                              handleToggleFavorite(template.id, e)
-                            }
-                            className={`absolute top-2.5 right-8 text-sm transition hover:scale-125 ${isFav ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
-                          >
-                            {isFav ? "★" : "☆"}
-                          </button>
-                          {/* Edit - visible on hover */}
-                          <button
-                            type="button"
-                            aria-label="Edit phrase"
-                            onClick={() =>
-                              catTpl.openEditTemplateForm(template, false)
-                            }
-                            className="absolute top-2 right-1 opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs"
-                          >
-                            ✎
-                          </button>
-                        </div>
-                      );
-                    })}
+                    {catTpl.filteredTemplates.map((template) => (
+                      <TemplateCard
+                        key={template.id}
+                        template={template}
+                        variant="sidebar"
+                        isSelected={catTpl.selectedTemplateId === template.id}
+                        isFavorite={catTpl.favorites.has(template.id)}
+                        lastScore={catTpl.templateLatestScores.get(template.id)}
+                        onSelect={() => selectTemplate(template)}
+                        onToggleFavorite={(e) =>
+                          handleToggleFavorite(template.id, e)
+                        }
+                        onEdit={() =>
+                          catTpl.openEditTemplateForm(template, false)
+                        }
+                      />
+                    ))}
                   </div>
                 )}
               </div>
@@ -1233,103 +1157,23 @@ export default function PronunciationPage() {
                         : "No catTpl.templates yet."}
                     </p>
                   ) : (
-                    catTpl.filteredTemplates.map((template) => {
-                      const isSelected =
-                        catTpl.selectedTemplateId === template.id;
-                      const isFav = catTpl.favorites.has(template.id);
-                      const diff = template.difficulty?.toLowerCase() ?? "";
-                      const diffBadge =
-                        diff === "easy"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : diff === "medium"
-                            ? "bg-amber-50 text-amber-600"
-                            : diff === "hard"
-                              ? "bg-red-50 text-red-600"
-                              : "bg-gray-100 text-gray-500";
-                      const diffLabel =
-                        diff.charAt(0).toUpperCase() + diff.slice(1) || "—";
-                      const lastScore = catTpl.templateLatestScores.get(
-                        template.id,
-                      );
-                      const dotColor =
-                        lastScore == null
-                          ? "bg-gray-200"
-                          : lastScore >= 80
-                            ? "bg-emerald-400"
-                            : lastScore >= 60
-                              ? "bg-amber-400"
-                              : "bg-red-400";
-
-                      return (
-                        <div
-                          key={template.id}
-                          className={`relative w-full rounded-2xl border-2 transition ${
-                            isSelected
-                              ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50"
-                              : "border-gray-100 bg-gray-50"
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => selectTemplate(template)}
-                            className="w-full px-4 py-3.5 text-left pr-20"
-                          >
-                            <div className="mb-1.5 flex items-center gap-2">
-                              <span
-                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${diffBadge}`}
-                              >
-                                {diffLabel}
-                              </span>
-                              {template.title && (
-                                <span className="text-[10px] font-bold text-purple-400 truncate">
-                                  {template.title}
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm font-semibold text-gray-700 leading-snug mb-2">
-                              {template.displayText}
-                            </p>
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
-                              />
-                              {lastScore == null ? (
-                                <span className="text-[11px] font-bold text-gray-400">
-                                  Not tried yet
-                                </span>
-                              ) : (
-                                <span
-                                  className={`text-[11px] font-bold ${lastScore >= 80 ? "text-emerald-600" : lastScore >= 60 ? "text-amber-500" : "text-red-500"}`}
-                                >
-                                  Last: {lastScore}
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                          {/* Star - always visible, outside select button */}
-                          <button
-                            type="button"
-                            onClick={(e) =>
-                              handleToggleFavorite(template.id, e)
-                            }
-                            className={`absolute top-3 right-10 text-sm transition hover:scale-125 ${isFav ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
-                          >
-                            {isFav ? "★" : "☆"}
-                          </button>
-                          {/* Edit button */}
-                          <button
-                            type="button"
-                            aria-label="Edit phrase"
-                            onClick={() =>
-                              catTpl.openEditTemplateForm(template, true)
-                            }
-                            className="absolute top-2.5 right-2.5 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs"
-                          >
-                            ✎
-                          </button>
-                        </div>
-                      );
-                    })
+                    catTpl.filteredTemplates.map((template) => (
+                      <TemplateCard
+                        key={template.id}
+                        template={template}
+                        variant="sheet"
+                        isSelected={catTpl.selectedTemplateId === template.id}
+                        isFavorite={catTpl.favorites.has(template.id)}
+                        lastScore={catTpl.templateLatestScores.get(template.id)}
+                        onSelect={() => selectTemplate(template)}
+                        onToggleFavorite={(e) =>
+                          handleToggleFavorite(template.id, e)
+                        }
+                        onEdit={() =>
+                          catTpl.openEditTemplateForm(template, true)
+                        }
+                      />
+                    ))
                   )}
                 </div>
               </>
