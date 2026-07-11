@@ -9,16 +9,10 @@ import { useRecordingSession } from "@/hooks/pronunciation/useRecordingSession";
 import { useSampleAudioPlayer } from "@/hooks/pronunciation/useSampleAudioPlayer";
 import { useScoring } from "@/hooks/pronunciation/useScoring";
 import { TemplateCard } from "@/components/pronunciation/TemplateCard";
+import { CategoryCard } from "@/components/pronunciation/CategoryCard";
+import { getCategoryIcon } from "@/lib/pronunciation/categoryIcon";
 
 // ── Static data ──────────────────────────────────────────────
-const getCategoryIcon = (categoryKey: string | null) => {
-  if (categoryKey === "daily") return "💬";
-  if (categoryKey === "interview") return "🧑‍💼";
-  if (categoryKey === "tech") return "💻";
-  if (categoryKey === "portfolio") return "✨";
-  return "📘";
-};
-
 // ── Helpers ──────────────────────────────────────────────────
 const scoreTextColor = (score: number) => {
   if (score >= 80) return "text-emerald-600";
@@ -250,46 +244,16 @@ export default function PronunciationPage() {
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     {catTpl.categories.map((cat) => (
-                      <div
+                      <CategoryCard
                         key={cat.id}
-                        className="group flex w-full items-center gap-3 rounded-xl border-2 border-transparent px-3 py-2.5 transition hover:border-purple-100 hover:bg-purple-50"
-                      >
-                        <button
-                          type="button"
-                          className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                          onClick={() => {
-                            catTpl.selectCategory(cat.id);
-                            catTpl.setSidebarView("phrases");
-                          }}
-                        >
-                          <span className="text-xl w-7 text-center shrink-0">
-                            {getCategoryIcon(cat.categoryKey)}
-                          </span>
-                          <span className="flex-1 min-w-0">
-                            <span className="block text-sm font-bold text-gray-700 truncate">
-                              {cat.displayName}
-                            </span>
-                            {cat.description && (
-                              <span className="block text-[11px] text-gray-400 truncate">
-                                {cat.description}
-                              </span>
-                            )}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`Edit ${cat.displayName}`}
-                          onClick={() =>
-                            catTpl.openEditCategoryForm(cat, false)
-                          }
-                          className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs shrink-0"
-                        >
-                          ✎
-                        </button>
-                        <span className="text-purple-300 text-base transition group-hover:translate-x-0.5 group-hover:text-purple-400 shrink-0">
-                          ›
-                        </span>
-                      </div>
+                        category={cat}
+                        variant="sidebar"
+                        onSelect={() => {
+                          catTpl.selectCategory(cat.id);
+                          catTpl.setSidebarView("phrases");
+                        }}
+                        onEdit={() => catTpl.openEditCategoryForm(cat, false)}
+                      />
                     ))}
                   </div>
                 )}
@@ -1204,34 +1168,16 @@ export default function PronunciationPage() {
                 </div>
                 <div className="px-5 py-4 flex flex-col gap-2 pb-8">
                   {catTpl.categories.map((cat) => (
-                    <div
+                    <CategoryCard
                       key={cat.id}
-                      className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3"
-                    >
-                      <button
-                        type="button"
-                        className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                        onClick={() => {
-                          catTpl.selectCategory(cat.id);
-                          catTpl.setSheetView("phrases");
-                        }}
-                      >
-                        <span className="text-xl w-6 text-center shrink-0">
-                          {getCategoryIcon(cat.categoryKey)}
-                        </span>
-                        <span className="text-sm font-bold text-gray-700 truncate flex-1">
-                          {cat.displayName}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Edit ${cat.displayName}`}
-                        onClick={() => catTpl.openEditCategoryForm(cat, true)}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs shrink-0"
-                      >
-                        ✎
-                      </button>{" "}
-                    </div>
+                      category={cat}
+                      variant="sheet"
+                      onSelect={() => {
+                        catTpl.selectCategory(cat.id);
+                        catTpl.setSheetView("phrases");
+                      }}
+                      onEdit={() => catTpl.openEditCategoryForm(cat, true)}
+                    />
                   ))}
                 </div>
               </>
