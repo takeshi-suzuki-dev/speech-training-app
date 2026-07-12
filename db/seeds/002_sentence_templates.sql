@@ -1,3 +1,7 @@
+-- Seed sentences: 25 across the four seed categories.
+-- Ownerless, and therefore read-only: the update and delete APIs resolve rows by owner.
+-- display_text is what the user reads; scoring_text is the contracted form actually spoken
+-- ("I'm" rather than "I am"), and is what Azure scores against.
 -- -------------------------------------------------------------
 -- Daily Chat
 -- -------------------------------------------------------------
@@ -20,8 +24,8 @@ values
     'daily_meeting_tomorrow',
     'Schedule',
     'I''d like to schedule a meeting for tomorrow afternoon.',
-    'I wanna schedule a meeting for tomorrow afternoon.',
-    'I wanna schedule a meeting for tomorrow afternoon.',
+    'I''d like to schedule a meeting for tomorrow afternoon.',
+    'I''d like to schedule a meeting for tomorrow afternoon.',
     'medium',
     2,
     true
@@ -80,7 +84,8 @@ values
     'easy',
     7,
     true
-  );
+  )
+on conflict (template_key) do nothing;
 
 
 -- -------------------------------------------------------------
@@ -154,7 +159,8 @@ values
     'hard',
     6,
     true
-  );
+  )
+on conflict (template_key) do nothing;
 
 -- -------------------------------------------------------------
 -- Tech Talk
@@ -238,7 +244,8 @@ values
     'easy',
     7,
     true
-  );
+  )
+on conflict (template_key) do nothing;
 
 
 -- -------------------------------------------------------------
@@ -285,8 +292,8 @@ values
     'portfolio_why_built',
     'Motivation',
     'I built this because I wanted to solve my own challenge of preparing for English job interviews.',
-    'I built this ''cause I wanna solve my own challenge of preparing for English job interviews.',
-    'I built this ''cause I wanna solve my own challenge of preparing for English job interviews.',
+    'I built this ''cause I wanted to solve my own challenge of preparing for English job interviews.',
+    'I built this ''cause I wanted to solve my own challenge of preparing for English job interviews.', 
     'medium',
     4,
     true
@@ -301,4 +308,5 @@ values
     'medium',
     5,
     true
-  );
+  )
+on conflict (template_key) do nothing;

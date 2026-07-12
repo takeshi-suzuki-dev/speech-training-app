@@ -1,3 +1,5 @@
+-- One audio row per seed sentence, with audio_path left null: the file is generated on first
+-- playback and the path filled in then.
 insert into public.sentence_template_audios
   (sentence_template_id, voice_role, voice_id, model_id, audio_path)
 select

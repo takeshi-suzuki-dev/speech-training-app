@@ -1,3 +1,5 @@
+-- Seed categories: the four system categories every user sees.
+-- Ownerless (owner_firebase_uid stays null), which is what makes them read-only in the app.
 insert into public.sentence_categories (category_key, display_name, description, sort_order, is_active)
 values
   ('daily',     'Daily Chat',  'Everyday conversation phrases',         1, true),

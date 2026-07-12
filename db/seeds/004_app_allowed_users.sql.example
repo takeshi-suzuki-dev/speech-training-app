@@ -1,0 +1,10 @@
+-- Allowlist entries. Copy to 005_app_allowed_users.sql, replace the addresses, and run.
+--
+-- Not committed with real values: the addresses are personal data, they differ per environment,
+-- and this repository is public. A deployment with an empty app_allowed_users table locks
+-- everyone out, including the owner, because the allowlist is checked on every protected request.
+insert into public.app_allowed_users (email, role, is_active, expires_at)
+values
+  ('you@example.com', 'OWNER', true, null),
+  ('recruiter@example.com', 'DEMO_RECRUITER', true, now() + interval '30 days')
+on conflict do nothing;

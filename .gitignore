@@ -144,3 +144,11 @@ CLAUDE.md
 
 # DS_STORE
 .DS_STORE
+
+# Local-only DB data
+#
+# Allowlist entries hold personal email addresses, differ per environment, and this repository is
+# public. Track only the .example template; the file with real addresses stays local.
+db/seeds/*_insert_app_allowed_users.sql
+db/seeds/004_app_allowed_users.sql
+!db/seeds/004_app_allowed_users.sql.example
