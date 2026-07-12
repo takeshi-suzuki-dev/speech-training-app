@@ -140,24 +140,13 @@ values
   ),
   (
     (select id from public.sentence_categories where category_key = 'interview'),
-    'interview_going_to_relocate',
-    'Relocation',
-    'I''m planning to relocate to Australia in mid-2027 following my visa approval.',
-    'I''m planning to relocate to Australia in mid-2027 following my visa approval.',
-    'I''m planning to relocate to Australia in mid-2027 following my visa approval.',
-    'medium',
-    5,
-    true
-  ),
-  (
-    (select id from public.sentence_categories where category_key = 'interview'),
     'interview_question_for_them',
     'Question',
     'Could you tell me more about the team structure and how engineers collaborate day to day?',
     'Could you tell me more about the team structure and how engineers collaborate day to day?',
     'Could you tell me more about the team structure and how engineers collaborate day to day?',
     'hard',
-    6,
+    5,
     true
   )
 on conflict (template_key) do nothing;
