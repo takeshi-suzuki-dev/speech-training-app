@@ -82,8 +82,13 @@ public class SentenceTemplateController {
     }
 
     @GetMapping("/sentence-templates")
-    public List<SentenceTemplateResponse> getTemplates(@RequestParam("categoryId") UUID categoryId) {
-        return sentenceTemplateService.findTemplatesByCategoryId(categoryId);
+    public List<SentenceTemplateResponse> getTemplates(
+            @RequestHeader("Authorization") String authorizationHeader,
+            @RequestParam("categoryId") UUID categoryId)
+            throws FirebaseAuthException {
+
+        FirebaseToken token = firebaseAuthService.verifyIdToken(authorizationHeader);
+        return sentenceTemplateService.findTemplatesByCategoryId(categoryId, token.getUid());
     }
 
     @GetMapping("/user-sentence-templates")

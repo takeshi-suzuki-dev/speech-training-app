@@ -61,8 +61,10 @@ public class SentenceTemplateService {
                 .toList();
     }
 
-    public List<SentenceTemplateResponse> findTemplatesByCategoryId(UUID categoryId) {
-        return sentenceTemplateRepository.findByCategoryIdAndActiveTrueOrderBySortOrderAsc(categoryId)
+    @Transactional(readOnly = true)
+    public List<SentenceTemplateResponse> findTemplatesByCategoryId(UUID categoryId, String firebaseUid) {
+        return sentenceTemplateRepository
+                .findVisibleTemplatesByCategoryId(categoryId, firebaseUid)
                 .stream()
                 .map(SentenceTemplateResponse::from)
                 .toList();
