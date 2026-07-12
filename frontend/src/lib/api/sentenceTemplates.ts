@@ -24,6 +24,12 @@ export type SentenceTemplate = {
   sampleAudioText: string;
   difficulty: string;
   sortOrder: number;
+  /**
+   * True when the signed-in user owns this template. Seed templates are system
+   * content with no owner and are read-only: the API rejects updates to them,
+   * so the edit affordance is hidden. To change a seed phrase, create your own.
+   */
+  userTemplate: boolean;
 };
 
 export type SaveSentenceTemplateRequest = {

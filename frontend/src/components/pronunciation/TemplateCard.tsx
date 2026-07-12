@@ -163,15 +163,19 @@ export function TemplateCard({
       >
         {isFavorite ? "★" : "☆"}
       </button>
-      {/* Edit */}
-      <button
-        type="button"
-        aria-label="Edit phrase"
-        onClick={onEdit}
-        className={styles.edit}
-      >
-        ✎
-      </button>
+      {/* Edit — only for templates the user owns. Seed templates are system
+          content and are rejected by the update API, so we don't offer the
+          action at all rather than let it fail on save. */}
+      {template.userTemplate && (
+        <button
+          type="button"
+          aria-label="Edit phrase"
+          onClick={onEdit}
+          className={styles.edit}
+        >
+          ✎
+        </button>
+      )}
     </div>
   );
 }

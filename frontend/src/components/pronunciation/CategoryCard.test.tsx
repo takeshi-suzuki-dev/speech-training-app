@@ -15,7 +15,7 @@ const baseCategory: SentenceCategory = {
   displayName: "Daily Chat",
   description: "Everyday conversation",
   sortOrder: 0,
-  userCategory: false,
+  userCategory: true,
 };
 
 type Overrides = {
@@ -106,5 +106,23 @@ describe("CategoryCard — variant affordances", () => {
     expect(screen.queryByText("Everyday conversation")).not.toBeInTheDocument();
     // The name is still shown.
     expect(screen.getByText("Daily Chat")).toBeInTheDocument();
+  });
+});
+
+describe("CategoryCard — seed categories are read-only", () => {
+  it("hides the edit button when the user does not own the category", () => {
+    renderCard({ category: { userCategory: false } });
+    expect(
+      screen.queryByRole("button", { name: "Edit Daily Chat" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still allows drilling into a seed category", async () => {
+    const user = userEvent.setup();
+    const { onSelect } = renderCard({ category: { userCategory: false } });
+
+    await user.click(screen.getByText("Daily Chat"));
+
+    expect(onSelect).toHaveBeenCalledTimes(1);
   });
 });

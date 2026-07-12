@@ -93,14 +93,18 @@ export function CategoryCard({
           </span>
         )}
       </button>
-      <button
-        type="button"
-        aria-label={`Edit ${category.displayName}`}
-        onClick={onEdit}
-        className={config.edit}
-      >
-        ✎
-      </button>
+      {/* Edit — only for categories the user owns. Seed categories are system
+          content and the update API rejects them, so the action is not offered. */}
+      {category.userCategory && (
+        <button
+          type="button"
+          aria-label={`Edit ${category.displayName}`}
+          onClick={onEdit}
+          className={config.edit}
+        >
+          ✎
+        </button>
+      )}
       {config.showChevron && (
         <span className="text-purple-300 text-base transition group-hover:translate-x-0.5 group-hover:text-purple-400 shrink-0">
           ›

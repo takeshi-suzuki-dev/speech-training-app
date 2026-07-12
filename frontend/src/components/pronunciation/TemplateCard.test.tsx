@@ -20,6 +20,7 @@ const baseTemplate: SentenceTemplate = {
   sampleAudioText: "Hello, how are you?",
   difficulty: "easy",
   sortOrder: 0,
+  userTemplate: true,
 };
 
 type Overrides = {
@@ -145,5 +146,36 @@ describe("TemplateCard — difficulty + score display", () => {
   it("uses red text below 60", () => {
     renderCard({ lastScore: 40 });
     expect(screen.getByText("Last: 40")).toHaveClass("text-red-500");
+  });
+});
+
+describe("TemplateCard — seed templates are read-only", () => {
+  it("hides the edit button when the user does not own the template", () => {
+    // Seed templates have no owner; the update API rejects them, so the card
+    // must not offer an edit that would fail on save.
+    renderCard({ template: { userTemplate: false } });
+    expect(
+      screen.queryByRole("button", { name: "Edit phrase" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still allows selecting and favoriting a seed template", async () => {
+    const user = userEvent.setup();
+    const { onSelect, onToggleFavorite } = renderCard({
+      template: { userTemplate: false },
+    });
+
+    await user.click(screen.getByText("Hello, how are you?"));
+    await user.click(screen.getByRole("button", { name: "☆" }));
+
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onToggleFavorite).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the edit button when the user owns the template", () => {
+    renderCard({ template: { userTemplate: true } });
+    expect(
+      screen.getByRole("button", { name: "Edit phrase" }),
+    ).toBeInTheDocument();
   });
 });
