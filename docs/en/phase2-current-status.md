@@ -1,6 +1,6 @@
 # Phase 2 Current Status
 
-Last updated: 2026-07-05
+Last updated: 2026-07-12
 
 ## Summary
 
@@ -10,7 +10,7 @@ Phase 1 was completed as a fixed-template MVP. The application can load fixed pr
 
 Phase 2 added Firebase authentication, an application-level allowlist, user-defined categories and sentence templates, favorites, and a landing page with a trial access request flow. Authentication and authorization are now consistently applied across all protected backend APIs.
 
-The app is ready for a controlled recruiter demo, subject to finalizing production CORS configuration as part of deployment.
+The app is ready for a controlled recruiter demo, subject to deployment.
 
 ## Current Position
 
@@ -53,18 +53,23 @@ The app is currently positioned as:
 - Account UI: sign-in, sign-out, and access-status handling in `AuthPanel`, with the backend's own denial message (e.g. "This demo is available upon request.") surfaced directly in the UI
 - Auto-redirect to `/pronunciation` immediately after a successful, allowlisted login — but not on every subsequent visit while already signed in, so returning to the landing page (e.g. via the logo) shows the account status instead of bouncing the user away
 - Account menu in the app header (`/pronunciation`, `/history`) showing the signed-in email, with a logout action that returns to the landing page
+- Seed categories and sentences are read-only: they are shared system content with no owner, the update and delete APIs resolve rows by owner and reject them, and the UI withholds the edit affordance rather than offering an action the API will refuse. To change a seed sentence, create your own.
+- Sentence listings are scoped to the caller: a category returns the ownerless seed sentences plus the caller's own, so one user's custom sentences are not visible to another
+- Deliberate failures reach the client with the status the service chose. A catch-all handler that reported them all as 500 would discard that status, so `ResponseStatusException` is handled ahead of it
+- The pronunciation page is split into hooks (`hooks/pronunciation/`) and presentational components (`components/pronunciation/`), with the page left to wire them together — see `frontend-architecture.md`
+- Vitest + React Testing Library cover the shared pronunciation components, asserting handler wiring and per-variant rendering
 
 ## Remaining Work
 
 - Multiple sample-audio voice options are implemented at the database/design level (`sentence_template_voice_options`) but not yet exposed through the API or UI. This is deferred to Phase 3.
-- Production CORS configuration is not yet finalized; the backend currently only allows `http://localhost:3000`. This needs to be updated once the frontend's production domain is known.
-- Automated unit test coverage is intentionally minimal at this stage. A manual testing checklist (`phase-2-manual-testing-checklist.md`) is used as the primary regression check instead of chasing full coverage.
+- Deployment to ECS/Fargate. The backend has no container image yet, Firebase credentials resolve through Application Default Credentials (which finds nothing on Fargate), and the allowed CORS origins have to be set to the deployed frontend's origin.
+- Automated coverage stops at the shared pronunciation components. The page, the hooks, and the backend have none, so the manual testing checklist (`phase2-manual-testing-checklist.md`) remains the primary regression check.
 
 ## Main Risk (Mitigated)
 
 Previously, the main risk was that the live app could become accessible to anyone who knew the URL and could sign in with Google. This is now mitigated: Firebase Authentication alone is no longer sufficient to use the app, because `FirebaseAuthenticationInterceptor` enforces the allowlist check on every protected request before it reaches a controller.
 
-The remaining operational risk is standard for any hosted demo: the CORS configuration and any deployment-specific environment variables must be set correctly before the production URL is shared.
+The remaining operational risk is standard for any hosted demo: the allowed CORS origins and the deployment's environment variables must be set correctly before the production URL is shared. Firebase credentials in particular cannot resolve the way they do locally, and the app will not start without them.
 
 ## Out of Scope for This Stage
 

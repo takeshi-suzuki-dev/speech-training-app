@@ -34,8 +34,8 @@ For details:
 
 - [Development Roadmap (EN)](docs/en/roadmap.md)
 - [開発フェーズ定義 (JP)](docs/jp/開発フェーズ定義.md)
-- [Phase 2 Current Status](docs/en/phase-2-current-status.md)
-- [Phase 2 Controlled Demo Requirements](docs/en/phase-2-controlled-demo-requirements.md)
+- [Phase 2 Current Status](docs/en/phase2-current-status.md)
+- [Phase 2 Controlled Demo Requirements](docs/en/phase2-controlled-demo-requirements.md)
 
 ---
 
@@ -49,7 +49,26 @@ For details:
 - [Phase 1 MVP Spec (EN)](docs/en/phase1-mvp-spec.md)
 - [Phase 1 MVP Spec (JP)](docs/jp/phase1_MVP仕様書.md)
 - [Phase 1 DB / Storage Design (EN)](docs/en/phase1-db-storage-design.md)
-- [Phase 1 DB / ストレージ 設計 (JP)](docs/jp/phase1_DB_ストレージ設計書.md)
+- [Phase 1 DB / ストレージ設計書 (JP)](docs/jp/phase1_DB_ストレージ設計書.md)
+
+## Phase 2 Specification
+
+- [Phase 2 DB / Storage Design (EN)](docs/en/phase2-db-storage-design.md)
+- [Phase 2 DB / ストレージ設計書 (JP)](docs/jp/phase2_DB_ストレージ設計書.md)
+
+## Design and API
+
+- [Frontend Architecture (EN)](docs/en/frontend-architecture.md)
+- [フロントエンド設計 (JP)](docs/jp/フロントエンド設計.md)
+- [Pronunciation Scoring API (EN)](docs/en/pronunciation-scoring-api.md)
+- [発音スコアリング API (JP)](docs/jp/pronunciation-scoring-api.md)
+- [Category / Sentence Deletion Behavior (EN)](docs/en/delete-behavior.md)
+- [カテゴリ&定型文削除処理仕様 (JP)](docs/jp/カテゴリ&定型文削除処理仕様.md)
+
+## Testing
+
+- [Manual Testing Checklist (EN)](docs/en/phase2-manual-testing-checklist.md)
+- [手動テストチェックリスト (JP)](docs/jp/Phase2_手動テストチェックリスト.md)
 
 ---
 
@@ -58,17 +77,23 @@ For details:
 ### Frontend
 
 - React
-- Next.js
+- Next.js (App Router)
 - TypeScript
 - Tailwind CSS
 - Recharts
+- Vitest / React Testing Library
 
 ### Backend
 
-- Java
+- Java 21
 - Spring Boot
 - Spring Data JPA
 - PostgreSQL
+
+### Authentication
+
+- Firebase Authentication (Google sign-in)
+- Application-level allowlist, enforced on every protected API
 
 ### AI / Cloud Services
 
@@ -134,21 +159,22 @@ Implemented scope:
 - Application-level allowlist (`app_allowed_users`), enforced globally on all protected backend APIs via `FirebaseAuthenticationInterceptor`
 - 401 for unauthenticated requests, 403 for authenticated-but-not-allowed requests (not on the allowlist, inactive, expired, or Firebase UID mismatch)
 - User-defined categories and practice sentences, scoped to the owner's Firebase UID
+- Seed categories and sentences are shared, ownerless system content, and are therefore read-only: they can be practiced but not edited or deleted, and a category lists the seed sentences plus the caller's own, never another user's
 - Favorite templates
 - Frontend API client that attaches Firebase ID tokens to every backend request
 - Clear unauthorized / forbidden UI states, showing the backend's own denial message
 - Landing page with a trial access request form
 - Account menu (signed-in email + logout) in the app header
 
-Remaining before broader use (tracked for Phase 3, see below):
+Remaining before broader use:
 
-- Production CORS configuration (currently allows `http://localhost:3000` only)
-- Multiple sample-audio voice options (implemented at the database/design level; not yet exposed via API or UI)
+- Deployment to AWS ECS/Fargate, including production CORS configuration (currently allows `http://localhost:3000` only) and Firebase credentials supplied through the environment
+- Multiple sample-audio voice options (implemented at the database/design level; not yet exposed via API or UI — deferred to Phase 3)
 
 For details:
 
-- [Phase 2 Current Status](docs/en/phase-2-current-status.md)
-- [Phase 2 Controlled Demo Requirements](docs/en/phase-2-controlled-demo-requirements.md)
+- [Phase 2 Current Status](docs/en/phase2-current-status.md)
+- [Phase 2 Controlled Demo Requirements](docs/en/phase2-controlled-demo-requirements.md)
 
 ---
 

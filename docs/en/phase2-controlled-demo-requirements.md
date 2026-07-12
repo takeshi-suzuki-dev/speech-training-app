@@ -2,7 +2,7 @@
 
 Last updated: 2026-06-28
 
-> **Status: Implemented.** See [Phase 2 Current Status](phase-2-current-status.md) for what's actually built. This document is kept as the original requirements/policy reference; it is not updated line-by-line as implementation details evolve.
+> **Status: Implemented.** See [Phase 2 Current Status](phase2-current-status.md) for what's actually built. This document is kept as the original requirements/policy reference; it is not updated line-by-line as implementation details evolve.
 
 ## Purpose
 

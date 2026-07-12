@@ -13,10 +13,10 @@ At this stage, testing focuses on:
 
 - Manual testing for major user flows
 - Backend integration-style checks for important protected APIs
-- Minimum smoke testing for the frontend
+- Automated component smoke tests (Vitest + React Testing Library) for the shared pronunciation components, covering handler wiring and per-variant rendering
 - Clear confirmation of authentication, authorization, and data ownership behavior
 
-Large-scale unit test coverage is out of scope for this stage.
+The automated tests run under jsdom, which has no geometry and applies no stylesheet. Layout, hover behavior, and breakpoints are therefore outside their reach and remain the job of this checklist. Large-scale unit test coverage is still out of scope for this stage.
 
 ## 3. Test Environment
 
@@ -261,6 +261,18 @@ Expected result:
 - No template is selected.
 - The UI shows an empty/no-category state without errors.
 
+### CAT-09: Seed categories are read-only
+
+Steps:
+1. Look at a seed category (one supplied with the app, not created by you).
+2. Hover over it in the sidebar, and open it in the mobile bottom sheet.
+3. Call `PUT /api/sentence-categories/{id}` for that category directly.
+
+Expected result:
+- No edit button appears on the category, in either layout.
+- The direct API call is rejected with 404, not 500.
+- The category can still be opened and its sentences practiced.
+
 ## 9. Sentence Template Management
 
 ### TMP-01: Load templates by category
@@ -350,6 +362,30 @@ Steps:
 Expected result:
 - No template is selected.
 - The category shows its empty/no-templates placeholder state, not a blank or broken screen.
+
+### TMP-09: Seed templates are read-only
+
+Steps:
+1. Open a seed category and look at a seed sentence.
+2. Check both the sidebar and the mobile bottom sheet.
+3. Call `PUT /api/sentence-templates/{id}` for that sentence directly.
+
+Expected result:
+- No edit button appears on the sentence, in either layout.
+- The delete action is unreachable, because it lives inside the edit form.
+- The direct API call is rejected with 404, not 500.
+- The sentence can still be selected, favorited, played, and scored.
+
+### TMP-10: Template listing is scoped to the signed-in user
+
+Steps:
+1. Sign in as user A and create a template in a seed category.
+2. Sign in as user B (a different allowlisted account).
+3. Open the same category as user B.
+
+Expected result:
+- User B sees the seed sentences, but not user A's template.
+- User A still sees both the seed sentences and their own template.
 
 ## 10. Favorites
 
@@ -469,7 +505,7 @@ The following items are known limitations at this stage:
 - The current sample audio API does not yet accept a voice option identifier from the frontend.
 - The UI does not yet show two sample audio play buttons.
 - Production CORS configuration is not finalized (currently allows `http://localhost:3000` only).
-- Full automated unit test coverage is intentionally out of scope for this stage; this manual checklist is the primary regression check.
+- Automated coverage is limited to the shared pronunciation components. The page, the hooks, and the backend have no automated tests, so this manual checklist remains the primary regression check.
 
 ## 15. Completion Criteria
 
