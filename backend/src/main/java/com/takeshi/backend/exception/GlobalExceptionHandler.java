@@ -51,13 +51,14 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Deliberate, already-classified failures (404 "not found", 400 "category is required", …).
+     * Failures a service has already classified: 404 for a sentence that is not the caller's, 400
+     * for a missing category, and so on.
      *
-     * <p>Without this handler the catch-all {@code Exception} handler below swallowed every
-     * {@link ResponseStatusException} and rewrote it as a 500, so a service that carefully threw
-     * 404 reached the client as "Unexpected server error" and the real status was lost. These are
-     * expected outcomes, not server faults: the status the service chose is returned as-is, and
-     * they are logged at WARN rather than ERROR.
+     * <p>This handler must exist, and must stay ahead of the catch-all below. {@code Exception}
+     * matches {@link ResponseStatusException} too, and an unqualified catch-all reports every such
+     * failure to the client as a 500 "Unexpected server error", discarding the status the service
+     * deliberately chose. These are expected outcomes rather than server faults, so the chosen
+     * status is passed through and they are logged at WARN.
      */
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, Object>> handleResponseStatusException(ResponseStatusException e) {

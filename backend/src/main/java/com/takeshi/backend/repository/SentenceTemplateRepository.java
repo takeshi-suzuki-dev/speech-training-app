@@ -23,11 +23,12 @@ public interface SentenceTemplateRepository extends JpaRepository<SentenceTempla
             String ownerFirebaseUid);
 
     /**
-     * Templates the signed-in user is allowed to see in a category: the seed templates (which have
-     * no owner and are shared system content) plus the user's own.
+     * The sentences a caller may see in a category: the ownerless seed sentences, which are shared
+     * system content, plus the caller's own.
      *
-     * <p>Mirrors {@code SentenceCategoryRepository#findVisibleCategories}. Without the owner
-     * predicate a category listing returned every user's custom templates to everyone.
+     * <p>The owner predicate is what keeps one user's custom sentences out of another's list, so
+     * every listing must go through this query rather than filter by category alone. Mirrors
+     * {@code SentenceCategoryRepository#findVisibleCategories}.
      */
     @Query("""
             select t

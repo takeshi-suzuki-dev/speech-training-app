@@ -15,11 +15,11 @@ public record SentenceTemplateResponse(
         String difficulty,
         Integer sortOrder,
         /**
-         * True when the signed-in user owns this template, i.e. it is editable.
+         * Whether the caller owns this sentence, and so may edit or delete it.
          *
-         * <p>Seed templates are system content and have no owner, so they are read-only: update and
-         * delete look the row up by owner and would reject them. Exposing ownership lets the client
-         * hide the edit affordance instead of offering an action the API will refuse. Mirrors
+         * <p>Seed sentences are shared system content with no owner, and update and delete resolve
+         * the row by owner, so they cannot be modified. The client needs to know this to withhold
+         * the edit affordance rather than offer an action the API will refuse. Mirrors
          * {@code userCategory} on {@link SentenceCategoryResponse}.
          */
         boolean userTemplate) {
