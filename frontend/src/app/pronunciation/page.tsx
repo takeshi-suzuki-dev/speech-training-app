@@ -308,8 +308,8 @@ export default function PronunciationPage() {
                 ) : catTpl.filteredTemplates.length === 0 ? (
                   <p className="py-6 text-center text-xs text-gray-400">
                     {catTpl.favoritesOnly
-                      ? "No catTpl.favorites yet."
-                      : "No catTpl.templates yet."}
+                      ? "No favorites yet."
+                      : "No practice sentences yet."}
                   </p>
                 ) : (
                   <div className="flex flex-col gap-2">
@@ -571,7 +571,7 @@ export default function PronunciationPage() {
             ))}
             <button
               type="button"
-              aria-label="Manage catTpl.categories"
+              aria-label="Manage categories"
               onClick={() => {
                 catTpl.setSheetView("categories");
                 setSheetOpen(true);
@@ -1117,8 +1117,8 @@ export default function PronunciationPage() {
                   ) : catTpl.filteredTemplates.length === 0 ? (
                     <p className="text-sm text-gray-400">
                       {catTpl.favoritesOnly
-                        ? "No catTpl.favorites yet."
-                        : "No catTpl.templates yet."}
+                        ? "No favorites yet."
+                        : "No practice sentences yet."}
                     </p>
                   ) : (
                     catTpl.filteredTemplates.map((template) => (
@@ -1143,7 +1143,7 @@ export default function PronunciationPage() {
               </>
             )}
 
-            {/* ── Sheet: catTpl.categories view ── */}
+            {/* ── Sheet: categories view ── */}
             {catTpl.sheetView === "categories" && (
               <>
                 <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-100">
