@@ -103,16 +103,21 @@ Expected result:
 
 ### AUTH-04: Expired or inactive allowlisted user
 
+Note: restore the row afterwards. Leaving it inactive locks you out of your own app.
+
 Steps:
 1. Set an allowlisted user to inactive or expired.
 2. Login with that user.
 3. Access a protected feature.
 
 Expected result:
-- The backend returns 403.
+- The backend returns 403 with the message "Demo access is inactive or expired."
+- The frontend displays that message, not the generic "available upon request" wording. This user is registered; telling them to request access would be false.
 - The user cannot use the protected feature.
 
 ### AUTH-05: Google account no longer matches the linked Firebase UID
+
+Note: record the original `firebase_uid` before changing it, and restore it afterwards. Setting it back to null also works — the next sign-in re-links it.
 
 Steps:
 1. Login once with an allowlisted user so their `app_allowed_users` row gets linked to a Firebase UID.
@@ -361,7 +366,8 @@ Steps:
 
 Expected result:
 - No template is selected.
-- The category shows its empty/no-templates placeholder state, not a blank or broken screen.
+- The category shows its empty placeholder state, not a blank or broken screen.
+- The placeholder reads "No practice sentences yet." — no internal variable or hook names in it.
 
 ### TMP-09: Seed templates are read-only
 
@@ -404,10 +410,12 @@ Expected result:
 
 Steps:
 1. Remove a favorite template.
+2. Turn on "Favorites only" in a category whose favorites you have just removed, so the filter matches nothing.
 
 Expected result:
 - The template is no longer marked as favorite.
 - The favorite state remains removed after reload.
+- With the filter on and nothing matching, the list shows "No favorites yet." — wording addressed to the user, with no internal variable or hook names in it.
 
 ## 11. Sample Audio
 
@@ -505,7 +513,8 @@ The following items are known limitations at this stage:
 - The current sample audio API does not yet accept a voice option identifier from the frontend.
 - The UI does not yet show two sample audio play buttons.
 - Production CORS configuration is not finalized (currently allows `http://localhost:3000` only).
-- Automated coverage is limited to the shared pronunciation components. The page, the hooks, and the backend have no automated tests, so this manual checklist remains the primary regression check.
+- Automated coverage is limited to the shared pronunciation components and the API error mapping. The page, the hooks, and the backend have no automated tests, so this manual checklist remains the primary regression check.
+- The trial access request form still opens the user's mail client via `mailto:`, which is awkward for webmail users. Replacing it with `POST /api/trial-request` backed by AWS SES is deferred to deployment, so TRIAL-01 tests the current behavior rather than the intended one.
 
 ## 15. Completion Criteria
 
