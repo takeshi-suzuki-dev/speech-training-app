@@ -134,6 +134,24 @@ Column notes:
 | `is_active` | Active flag |
 | `deleted_at` | Logical deletion timestamp |
 
+#### Current state: the table exists but is empty
+
+The table is groundwork. Nothing in the application reads it, writes it, or keeps it in step with
+the sentences: sample audio is served from `sentence_template_audios`, which carries its own
+`voice_id` and `model_id`, and the multiple-voice feature this table exists for is deferred to
+Phase 3.
+
+It is therefore deliberately left empty. It was populated once, by copying
+`sentence_template_audios` row by row, and the copy immediately went stale: sentences created
+afterwards got no row, and rows created through the app carried a null `model_id`. Data that no
+code maintains does not stay true, and a half-correct table is worse than an empty one, because it
+invites the reader to trust it.
+
+Phase 3 populates it as part of building the feature, alongside the code that will maintain it:
+a row must be created when a sentence is created, and logically deleted when a sentence is deleted.
+Until then, an empty table is the honest state, and `sentence_template_audios.voice_option_id`
+stays null for the same reason.
+
 ### 4.3 `sentence_template_audios`
 
 `sentence_template_audios` stores generated sample audio cache for each sentence template and voice option.
