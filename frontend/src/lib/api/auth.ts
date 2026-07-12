@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/apiFetch";
+import { getAccessDeniedMessage } from "@/lib/api/apiError";
 
 // Mirrors the existing lib/api/tts.ts and lib/api/pronunciationAssessment.ts
 // convention: throw an Error with a user-facing message on non-2xx, rather
@@ -11,7 +12,7 @@ import { apiFetch } from "@/lib/api/apiFetch";
 // token check and the allowlist check before the request reaches
 // AuthController. So a single call here tells us everything we need:
 //   200 -> { uid, email }  → signed in AND allowlisted
-//   403 -> not allowlisted (same wording used by tts.ts / pronunciationAssessment.ts)
+//   403 -> allowlist refused the request; the reason is in the response body
 //   401 -> token missing/invalid/expired
 
 export type AuthMeResponse = {
@@ -23,19 +24,21 @@ export async function fetchAuthMe(): Promise<AuthMeResponse> {
   const response = await apiFetch("/api/auth/me");
 
   if (!response.ok) {
-    throw new Error(getAuthMeErrorMessage(response.status));
+    throw new Error(await getAuthMeErrorMessage(response));
   }
 
   return response.json();
 }
 
-function getAuthMeErrorMessage(status: number): string {
+async function getAuthMeErrorMessage(response: Response): Promise<string> {
+  const status = response.status;
+
   if (status === 401) {
     return "Please log in to continue.";
   }
 
   if (status === 403) {
-    return "This demo is available upon request. Please contact the developer if you need access.";
+    return getAccessDeniedMessage(response);
   }
 
   if (status >= 500) {

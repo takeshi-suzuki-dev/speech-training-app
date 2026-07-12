@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/apiFetch";
+import { getAccessDeniedMessage } from "@/lib/api/apiError";
 
 export async function generateSampleSpeech(text: string): Promise<Blob> {
   const response = await apiFetch("/api/tts", {
@@ -7,7 +8,7 @@ export async function generateSampleSpeech(text: string): Promise<Blob> {
   });
 
   if (!response.ok) {
-    throw new Error(getTtsApiErrorMessage(response.status));
+    throw new Error(await getTtsApiErrorMessage(response));
   }
 
   return response.blob();
@@ -24,13 +25,15 @@ export async function generateTemplateSampleAudio(
   );
 
   if (!response.ok) {
-    throw new Error(getTtsApiErrorMessage(response.status));
+    throw new Error(await getTtsApiErrorMessage(response));
   }
 
   return response.blob();
 }
 
-function getTtsApiErrorMessage(status: number): string {
+async function getTtsApiErrorMessage(response: Response): Promise<string> {
+  const status = response.status;
+
   if (status === 400) {
     return "Invalid text-to-speech request. Please check the text.";
   }
@@ -40,7 +43,7 @@ function getTtsApiErrorMessage(status: number): string {
   }
 
   if (status === 403) {
-    return "This demo is available upon request. Please contact the developer if you need access.";
+    return getAccessDeniedMessage(response);
   }
 
   if (status === 404) {

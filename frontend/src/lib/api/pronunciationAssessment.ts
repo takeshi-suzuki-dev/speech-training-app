@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/apiFetch";
+import { getAccessDeniedMessage } from "@/lib/api/apiError";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
 import { getOrCreateClientId } from "../clientId";
 
@@ -24,13 +25,15 @@ export async function scorePronunciation(
   });
 
   if (!response.ok) {
-    throw new Error(getSpeechApiErrorMessage(response.status));
+    throw new Error(await getSpeechApiErrorMessage(response));
   }
 
   return response.json();
 }
 
-function getSpeechApiErrorMessage(status: number): string {
+async function getSpeechApiErrorMessage(response: Response): Promise<string> {
+  const status = response.status;
+
   if (status === 400) {
     return "Invalid request. Please check the audio file and reference text.";
   }
@@ -40,7 +43,7 @@ function getSpeechApiErrorMessage(status: number): string {
   }
 
   if (status === 403) {
-    return "This demo is available upon request. Please contact the developer if you need access.";
+    return getAccessDeniedMessage(response);
   }
 
   if (status === 429) {
