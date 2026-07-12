@@ -13,7 +13,16 @@ public record SentenceTemplateResponse(
         String scoringText,
         String sampleAudioText,
         String difficulty,
-        Integer sortOrder) {
+        Integer sortOrder,
+        /**
+         * True when the signed-in user owns this template, i.e. it is editable.
+         *
+         * <p>Seed templates are system content and have no owner, so they are read-only: update and
+         * delete look the row up by owner and would reject them. Exposing ownership lets the client
+         * hide the edit affordance instead of offering an action the API will refuse. Mirrors
+         * {@code userCategory} on {@link SentenceCategoryResponse}.
+         */
+        boolean userTemplate) {
     public static SentenceTemplateResponse from(SentenceTemplate template) {
         return new SentenceTemplateResponse(
                 template.getId(),
@@ -24,6 +33,7 @@ public record SentenceTemplateResponse(
                 template.getScoringText(),
                 template.getSampleAudioText(),
                 template.getDifficulty(),
-                template.getSortOrder());
+                template.getSortOrder(),
+                template.getOwnerFirebaseUid() != null);
     }
 }
