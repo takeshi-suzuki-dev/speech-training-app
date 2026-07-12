@@ -4,10 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import { SentenceCategory } from "@/lib/api/sentenceTemplates";
 import { CategoryCard, type CategoryCardVariant } from "./CategoryCard";
 
-// Same intent as TemplateCard.test.tsx: guard the parts tsc can't see —
-// which button is wired to which handler, and the per-variant affordances
-// (the sidebar shows description + chevron, the sheet does not).
-// Layout / hover / breakpoints are NOT covered; verify those in the browser.
+// Same intent as TemplateCard.test.tsx: that each button reaches the handler it
+// is meant to, and that each variant renders the affordances it should. Layout,
+// hover and breakpoints are not covered — those still need a browser.
 
 const baseCategory: SentenceCategory = {
   id: "cat-1",
@@ -50,8 +49,8 @@ describe("CategoryCard — handler wiring", () => {
   });
 
   it("fires onEdit (and NOT onSelect) when the edit button is clicked", async () => {
-    // Regression guard: edit sits outside the select button, so editing must
-    // never also drill into the category.
+    // Edit sits inside the row; without the click being contained, editing a
+    // category would also navigate away into its phrase list.
     const user = userEvent.setup();
     const { onSelect, onEdit } = renderCard();
 

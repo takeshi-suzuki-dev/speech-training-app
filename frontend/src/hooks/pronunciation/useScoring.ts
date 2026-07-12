@@ -5,21 +5,19 @@ import { PhonemeResult, SpeechEvaluateResponse } from "@/types/pronunciation";
 
 // ── Params / return ──────────────────────────────────────────
 type UseScoringParams = {
-  /** Scoring problems (input validation + assessment API failures). */
   reportError: (message: string) => void;
 };
 
+/**
+ * Everything an assessment run needs. Passed per call rather than at hook init:
+ * the recording, the sentence and the score badges are owned by three different
+ * hooks, and taking them as arguments keeps this one independent of all three.
+ */
 type SubmitArgs = {
-  /** The captured recording to score. */
   audioFile: File | null;
-  /** Fallback reference text used when the template has no scoringText. */
   referenceText: string;
-  /** Selected sentence; supplies scoringText + id for the request. */
   template: SentenceTemplate | null;
-  /**
-   * Called after a successful score so the caller can refresh side data
-   * (e.g. the per-template "latest score" badges). Awaited.
-   */
+  /** Awaited after a successful score, to refresh the per-sentence badges. */
   onScored: () => Promise<void> | void;
 };
 
@@ -27,21 +25,15 @@ export type Scoring = {
   result: SpeechEvaluateResponse | null;
   loading: boolean;
   scored: boolean;
-  /** Index of the word chip whose phoneme detail is expanded (null = none). */
+  /** Word chip whose phoneme breakdown is expanded; null when none is. */
   expandedWord: number | null;
-  /**
-   * Validate inputs, run the assessment, and store the result. Surfaces
-   * validation/API problems through `reportError`; never throws.
-   */
+  /** Reports validation and API problems via `reportError`; never throws. */
   submit: (args: SubmitArgs) => Promise<void>;
-  /** Toggle the expanded phoneme detail for a word chip. */
   toggleWord: (index: number) => void;
-  /** Phonemes belonging to a word in the current result (case-insensitive). */
   getPhonemesByWord: (word: string) => PhonemeResult[];
   /**
-   * Clear result / scored / expandedWord. Call when the current score is no
-   * longer relevant — e.g. a new recording starts or the sentence changes.
-   * Stable identity (safe as an effect dependency / callback prop).
+   * Discards the current score. Stable identity, so it is safe both as an effect
+   * dependency and as the recording hook's `onRecordingStart` callback.
    */
   reset: () => void;
 };
@@ -52,17 +44,15 @@ export function useScoring({ reportError }: UseScoringParams): Scoring {
   const [scored, setScored] = useState(false);
   const [expandedWord, setExpandedWord] = useState<number | null>(null);
 
-  // reportError read through a ref so `submit` doesn't need it as a dependency
-  // (avoids re-subscribe churn on parent re-renders). Synced in an effect —
-  // never written during render (react-hooks/refs). Same pattern as the other
-  // pronunciation hooks.
+  // Held in a ref so `submit` can keep an empty dependency array and a stable
+  // identity even though the parent passes a fresh callback every render. The
+  // ref is synced in an effect, never during render: `react-hooks/refs` forbids
+  // writing to a ref while rendering.
   const reportErrorRef = useRef(reportError);
   useEffect(() => {
     reportErrorRef.current = reportError;
   });
 
-  // Uses only plain/stable setters, so it's a stable ([]) callback — safe to
-  // pass as `onRecordingStart` and to depend on in the template-switch effect.
   const reset = useCallback(() => {
     setResult(null);
     setScored(false);
@@ -89,8 +79,9 @@ export function useScoring({ reportError }: UseScoringParams): Scoring {
       try {
         setLoading(true);
         reportErrorRef.current("");
-        // Score against the natural-contraction text when the template has one;
-        // fall back to the displayed reference text otherwise.
+        // Sentences are displayed in full but scored against a contracted form
+        // ("I am" vs "I'm"), because that is what a speaker actually says. Only
+        // templates carry that second form; free text is scored as written.
         const scoringText = template?.scoringText ?? referenceText;
         const response = await scorePronunciation(
           audioFile,
@@ -115,8 +106,6 @@ export function useScoring({ reportError }: UseScoringParams): Scoring {
     [],
   );
 
-  // Fresh closure each render so it always reads the latest result; only ever
-  // called during render (in the word-scores JSX), so no memoization needed.
   const getPhonemesByWord = (word: string): PhonemeResult[] => {
     if (!result?.phonemes) return [];
     return result.phonemes.filter(

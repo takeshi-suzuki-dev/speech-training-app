@@ -4,11 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import { SentenceTemplate } from "@/lib/api/sentenceTemplates";
 import { TemplateCard, type TemplateCardVariant } from "./TemplateCard";
 
-// A card is presentational, so a test only needs a plausible template plus spy
-// callbacks. These smoke tests guard the parts tsc/eslint can't: which button
-// is wired to which handler (re-pointed during the sidebar/sheet dedup), the
-// per-variant class output, and the difficulty/score display thresholds.
-// They do NOT cover layout, hover, or breakpoints — verify those in the browser.
+// Covers what the type checker cannot: that each button reaches the handler it
+// is meant to, that a variant produces the classes that variant needs, and the
+// display thresholds. Layout, hover and breakpoints are not covered — jsdom has
+// no geometry and applies no stylesheet, so those still need a browser.
 
 const baseTemplate: SentenceTemplate = {
   id: "tpl-1",
@@ -65,8 +64,8 @@ describe("TemplateCard — handler wiring", () => {
   });
 
   it("fires onToggleFavorite (and NOT onSelect) when the star is clicked", async () => {
-    // Regression guard: the star is a sibling of the select button, so clicking
-    // it must never also select the card.
+    // The star sits inside the card but outside the select button; without the
+    // event being stopped, favoriting would also switch the practice sentence.
     const user = userEvent.setup();
     const { onSelect, onToggleFavorite } = renderCard({ isFavorite: false });
 
@@ -151,8 +150,6 @@ describe("TemplateCard — difficulty + score display", () => {
 
 describe("TemplateCard — seed templates are read-only", () => {
   it("hides the edit button when the user does not own the template", () => {
-    // Seed templates have no owner; the update API rejects them, so the card
-    // must not offer an edit that would fail on save.
     renderCard({ template: { userTemplate: false } });
     expect(
       screen.queryByRole("button", { name: "Edit phrase" }),

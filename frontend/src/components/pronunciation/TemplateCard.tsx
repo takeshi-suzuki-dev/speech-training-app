@@ -1,13 +1,7 @@
 import type { MouseEvent } from "react";
 import { SentenceTemplate } from "@/lib/api/sentenceTemplates";
 
-/**
- * Which surface the card renders on. Both layouts are kept intentionally
- * (mobile is used going forward); this only selects the per-variant styling
- * that used to be duplicated between the desktop sidebar and the mobile
- * bottom sheet. Structure, content, and behaviour are identical across
- * variants.
- */
+/** The surface the card renders on. Selects styling only; behaviour is identical. */
 export type TemplateCardVariant = "sidebar" | "sheet";
 
 type TemplateCardProps = {
@@ -15,19 +9,16 @@ type TemplateCardProps = {
   variant: TemplateCardVariant;
   isSelected: boolean;
   isFavorite: boolean;
-  /** Latest score for this template; null/undefined => never attempted. */
+  /** Null when the sentence has never been attempted. */
   lastScore: number | null | undefined;
-  /** Select this template as the active phrase. */
   onSelect: () => void;
-  /** Toggle favorite. Receives the event so the caller can stopPropagation. */
+  /** Receives the event so the caller can stop it from also selecting the card. */
   onToggleFavorite: (event: MouseEvent) => void;
-  /** Open the edit form for this template. */
   onEdit: () => void;
 };
 
-// Per-variant class table. The only real differences between the sidebar and
-// sheet cards are cosmetic (corner radius, padding, hover/shadow affordances,
-// and the star/edit button positions). Everything else is shared below.
+// The two surfaces differ only in corner radius, padding, hover affordances and
+// button positions. Keeping those in one table lets the markup below stay single.
 const VARIANT_STYLES: Record<
   TemplateCardVariant,
   {
@@ -94,9 +85,8 @@ function scoreTextClass(lastScore: number): string {
 }
 
 /**
- * A single selectable phrase card, shared by the desktop sidebar and the
- * mobile bottom sheet. Presentational: all state and side effects are owned by
- * the caller and passed in as props.
+ * A selectable phrase card. Presentational: the caller owns all state and side
+ * effects, including which sentence is selected and what editing means.
  */
 export function TemplateCard({
   template,
@@ -120,7 +110,6 @@ export function TemplateCard({
         onClick={onSelect}
         className={styles.selectButton}
       >
-        {/* Badge + title row */}
         <div className="flex items-center gap-2 mb-1.5">
           <span
             className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${diffBadge}`}
@@ -133,9 +122,7 @@ export function TemplateCard({
             </span>
           )}
         </div>
-        {/* Phrase text */}
         <p className={styles.phraseText}>{template.displayText}</p>
-        {/* Score row */}
         <div className={styles.scoreRow}>
           <span
             className={`w-2 h-2 rounded-full shrink-0 ${scoreDotClass(lastScore)}`}
@@ -151,7 +138,6 @@ export function TemplateCard({
           )}
         </div>
       </button>
-      {/* Star - always visible, outside select button */}
       <button
         type="button"
         onClick={onToggleFavorite}
@@ -163,9 +149,8 @@ export function TemplateCard({
       >
         {isFavorite ? "★" : "☆"}
       </button>
-      {/* Edit — only for templates the user owns. Seed templates are system
-          content and are rejected by the update API, so we don't offer the
-          action at all rather than let it fail on save. */}
+      {/* Seed sentences have no owner and the update API rejects them, so the
+          affordance is withheld rather than offered and failed on save. */}
       {template.userTemplate && (
         <button
           type="button"

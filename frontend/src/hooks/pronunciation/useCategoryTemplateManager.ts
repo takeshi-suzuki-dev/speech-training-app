@@ -70,13 +70,11 @@ const upsertCategory = (
   return nextItems.sort((a, b) => a.sortOrder - b.sortOrder);
 };
 
-// These two strings were previously duplicated across ~8 separate
-// `setReferenceText(...)` call sites throughout the component, each of
-// which had to be kept manually in sync with `selectedTemplateId`. That
-// duplication was the likely root cause of at least one hard-to-reproduce
-// selection bug (a stale sentence showing after switching categories). Here,
-// `referenceText` is a single derived value instead — see the bottom of this
-// hook — so there is exactly one place that can get it wrong.
+// Placeholders for the two empty states. `referenceText` is derived from the
+// selection at the bottom of this hook rather than stored, so these are read in
+// exactly one place: any copy of the sentence held in its own state has to be
+// resynced on every path that changes the selection, and a single missed path
+// leaves a stale sentence on screen.
 const NO_CATEGORY_TEXT = "Select a category to get started.";
 const NO_TEMPLATE_TEXT = "Select a practice sentence to get started.";
 
@@ -454,10 +452,10 @@ export function useCategoryTemplateManager({
       const nextCategories = await fetchSentenceCategories();
       setCategories(nextCategories);
 
-      // Deleting the selected category always unselects both category and
-      // sentence, regardless of position in the list (see delete-behavior
-      // docs — this was previously position-dependent next/previous
-      // fallback logic, which turned out not to match the intended design).
+      // Deleting the selected category clears both the category and the
+      // sentence, whatever its position in the list. Note this deliberately
+      // differs from deleting a sentence, which falls back to the next or
+      // previous one; see the delete-behavior docs.
       if (selectedCategoryId === catId) {
         setSelectedCategoryId(null);
         setTemplates([]);

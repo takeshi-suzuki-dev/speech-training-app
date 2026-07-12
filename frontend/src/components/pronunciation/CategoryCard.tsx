@@ -2,24 +2,17 @@ import { SentenceCategory } from "@/lib/api/sentenceTemplates";
 import { getCategoryIcon } from "@/lib/pronunciation/categoryIcon";
 
 /**
- * Which surface the card renders on. Mirrors TemplateCard: both layouts are
- * kept intentionally, and the variant only selects styling/affordances that
- * were previously duplicated between the desktop sidebar and the mobile sheet.
- *
- * Note the two variants are not pure style twins — the sidebar additionally
- * shows the category description and a drill-in chevron, and reveals its edit
- * button on hover (there is no hover on touch, so the sheet shows it always).
- * Those differences are declared in VARIANT_CONFIG rather than left to the
- * call sites.
+ * The surface the card renders on. Unlike TemplateCard's, these variants are not
+ * style twins: the sidebar has room to show the description and a drill-in
+ * chevron, and the sheet is on touch, where nothing can be revealed on hover.
+ * VARIANT_CONFIG declares those differences so no call site has to know them.
  */
 export type CategoryCardVariant = "sidebar" | "sheet";
 
 type CategoryCardProps = {
   category: SentenceCategory;
   variant: CategoryCardVariant;
-  /** Drill into this category's phrase list. */
   onSelect: () => void;
-  /** Open the edit form for this category. */
   onEdit: () => void;
 };
 
@@ -29,9 +22,7 @@ const VARIANT_CONFIG: Record<
     container: string;
     icon: string;
     edit: string;
-    /** Sidebar shows the description under the name; the sheet does not. */
     showDescription: boolean;
-    /** Sidebar shows a "›" drill-in affordance; the sheet does not. */
     showChevron: boolean;
   }
 > = {
@@ -54,9 +45,8 @@ const VARIANT_CONFIG: Record<
 };
 
 /**
- * A single selectable category row, shared by the desktop sidebar and the
- * mobile bottom sheet. Presentational: all state and side effects are owned by
- * the caller and passed in as props.
+ * A selectable category row. Presentational: the caller owns all state and side
+ * effects, including what selecting a category navigates to.
  */
 export function CategoryCard({
   category,
@@ -93,8 +83,8 @@ export function CategoryCard({
           </span>
         )}
       </button>
-      {/* Edit — only for categories the user owns. Seed categories are system
-          content and the update API rejects them, so the action is not offered. */}
+      {/* Seed categories have no owner and the update API rejects them, so the
+          affordance is withheld rather than offered and failed on save. */}
       {category.userCategory && (
         <button
           type="button"
