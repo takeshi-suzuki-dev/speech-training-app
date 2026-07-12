@@ -17,7 +17,13 @@ import com.takeshi.backend.exception.ElevenLabsApiException;
 @Service
 public class TtsService {
 
-    private static final String DEFAULT_MODEL_ID = "eleven_multilingual_v2";
+    /**
+     * The model an audio row is created with when no other is chosen. Public because the row is
+     * created before any audio exists, and the caller has to record which model it will be, rather
+     * than leave it null and rely on this class to substitute the default at generation time — the
+     * substitution keeps generation working but leaves the row with no record of what produced it.
+     */
+    public static final String DEFAULT_MODEL_ID = "eleven_multilingual_v2";
 
     @Value("${elevenlabs.api-key}")
     private String apiKey;

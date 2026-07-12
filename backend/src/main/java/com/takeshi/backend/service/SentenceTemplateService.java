@@ -207,7 +207,7 @@ public class SentenceTemplateService {
                         savedTemplate.getId(),
                         PHASE1_VOICE_ROLE,
                         defaultVoiceId,
-                        null));
+                        TtsService.DEFAULT_MODEL_ID));
 
         return SentenceTemplateResponse.from(savedTemplate);
     }
