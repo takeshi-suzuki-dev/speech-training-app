@@ -84,12 +84,15 @@ describe("CategoryCard — variant affordances", () => {
     expect(screen.queryByText("›")).not.toBeInTheDocument();
   });
 
-  it("sidebar reveals the edit button on hover (group + group-hover)", () => {
+  it("sidebar keeps the edit button always visible with a hover/focus highlight", () => {
     const { root } = renderCard({ variant: "sidebar" });
     expect(root).toHaveClass("group");
-    expect(screen.getByRole("button", { name: "Edit Daily Chat" })).toHaveClass(
-      "group-hover:opacity-100",
-    );
+    const edit = screen.getByRole("button", { name: "Edit Daily Chat" });
+    // Always visible (no opacity toggle) to avoid accidental clicks from the
+    // icon suddenly appearing under the cursor.
+    expect(edit).not.toHaveClass("opacity-0");
+    expect(edit).not.toHaveClass("group-hover:opacity-100");
+    expect(edit).toHaveClass("hover:bg-purple-100", "focus-visible:bg-purple-100");
   });
 
   it("sheet always shows the edit button (no hover on touch)", () => {

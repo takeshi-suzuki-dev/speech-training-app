@@ -30,7 +30,7 @@ const VARIANT_CONFIG: Record<
     container:
       "group flex w-full items-center gap-3 rounded-xl border-2 border-transparent px-3 py-2.5 transition hover:border-purple-100 hover:bg-purple-50",
     icon: "text-xl w-7 text-center shrink-0",
-    edit: "opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs shrink-0",
+    edit: "w-6 h-6 flex items-center justify-center rounded-lg text-gray-600 hover:text-purple-600 hover:bg-purple-100 focus-visible:text-purple-600 focus-visible:bg-purple-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-300 transition text-xs shrink-0",
     showDescription: true,
     showChevron: true,
   },
@@ -38,7 +38,7 @@ const VARIANT_CONFIG: Record<
     container:
       "flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3",
     icon: "text-xl w-6 text-center shrink-0",
-    edit: "w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs shrink-0",
+    edit: "w-7 h-7 flex items-center justify-center rounded-lg text-gray-600 hover:text-purple-600 hover:bg-purple-100 focus-visible:text-purple-600 focus-visible:bg-purple-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-300 transition text-xs shrink-0",
     showDescription: false,
     showChevron: false,
   },

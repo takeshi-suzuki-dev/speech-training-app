@@ -92,12 +92,16 @@ describe("TemplateCard — handler wiring", () => {
 });
 
 describe("TemplateCard — variant styling", () => {
-  it("sidebar uses rounded-xl + group (hover-revealed edit)", () => {
+  it("sidebar uses rounded-xl + group, edit always visible with hover/focus highlight", () => {
     const { root } = renderCard({ variant: "sidebar" });
     expect(root).toHaveClass("rounded-xl", "group");
     const edit = screen.getByRole("button", { name: "Edit phrase" });
-    // Sidebar edit is revealed on hover.
-    expect(edit).toHaveClass("group-hover:opacity-100");
+    // Edit pencil is always visible (no opacity toggle) to avoid accidental
+    // clicks from the icon suddenly appearing under the cursor; hover/focus
+    // only changes color, it doesn't control visibility.
+    expect(edit).not.toHaveClass("opacity-0");
+    expect(edit).not.toHaveClass("group-hover:opacity-100");
+    expect(edit).toHaveClass("hover:bg-purple-100", "focus-visible:bg-purple-100");
   });
 
   it("sheet uses rounded-2xl, no group (always-visible edit)", () => {

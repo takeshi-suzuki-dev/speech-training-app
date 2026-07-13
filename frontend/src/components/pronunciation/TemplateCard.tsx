@@ -41,7 +41,7 @@ const VARIANT_STYLES: Record<
     phraseText: "text-[13px] font-semibold text-gray-700 leading-snug",
     scoreRow: "flex items-center gap-1.5 mt-1.5",
     star: "absolute top-2.5 right-8 text-sm transition hover:scale-125",
-    edit: "absolute top-2 right-1 opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs",
+    edit: "absolute top-2 right-1 w-6 h-6 flex items-center justify-center rounded-lg text-gray-600 hover:text-purple-600 hover:bg-purple-100 focus-visible:text-purple-600 focus-visible:bg-purple-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-300 transition text-xs",
   },
   sheet: {
     container: (isSelected) =>
@@ -54,7 +54,7 @@ const VARIANT_STYLES: Record<
     phraseText: "text-sm font-semibold text-gray-700 leading-snug mb-2",
     scoreRow: "flex items-center gap-1.5",
     star: "absolute top-3 right-10 text-sm transition hover:scale-125",
-    edit: "absolute top-2.5 right-2.5 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-purple-400 hover:bg-purple-100 transition text-xs",
+    edit: "absolute top-2.5 right-2.5 w-7 h-7 flex items-center justify-center rounded-lg text-gray-600 hover:text-purple-600 hover:bg-purple-100 focus-visible:text-purple-600 focus-visible:bg-purple-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-300 transition text-xs",
   },
 };
 
@@ -144,7 +144,7 @@ export function TemplateCard({
         className={`${styles.star} ${
           isFavorite
             ? "text-amber-400"
-            : "text-gray-300 hover:text-amber-300"
+            : "text-gray-600 hover:text-amber-400"
         }`}
       >
         {isFavorite ? "★" : "☆"}
