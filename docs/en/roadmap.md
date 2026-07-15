@@ -60,7 +60,7 @@ Turn the PoC into a minimally usable pronunciation training app.
 
 ---
 
-## Phase 2: Authentication and User-defined Practice Sentences
+## Phase 2: Authentication and User-defined Practice Sentences — Completed
 
 ### Goal
 

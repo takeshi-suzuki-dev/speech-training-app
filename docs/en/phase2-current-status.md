@@ -1,6 +1,6 @@
 # Phase 2 Current Status
 
-Last updated: 2026-07-12
+Last updated: 2026-07-15
 
 ## Summary
 
@@ -58,6 +58,7 @@ The app is currently positioned as:
 - Deliberate failures reach the client with the status the service chose. A catch-all handler that reported them all as 500 would discard that status, so `ResponseStatusException` is handled ahead of it
 - The pronunciation page is split into hooks (`hooks/pronunciation/`) and presentational components (`components/pronunciation/`), with the page left to wire them together — see `frontend-architecture.md`
 - Vitest + React Testing Library cover the shared pronunciation components, asserting handler wiring and per-variant rendering
+- WCAG AA contrast pass across the pronunciation and history screens (edit/favorite icons, chart axis labels, section labels), mobile viewport fix (`min-h-dvh` instead of `min-h-screen`) to remove a black gap below content on mobile, and a clickable/toggleable legend on the score-breakdown chart
 
 ## Remaining Work
 
