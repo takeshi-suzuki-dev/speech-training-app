@@ -426,7 +426,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
+    <main className="min-h-dvh bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
       {/* ── Top bar ── */}
       <header className="max-w-300 mx-auto flex items-center px-6 py-5">
         <span className="text-lg font-black text-gray-800 tracking-tight">

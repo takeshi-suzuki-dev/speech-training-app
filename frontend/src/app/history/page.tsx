@@ -57,7 +57,7 @@ function getRankMessage(rank: number | null): {
 // ── UI primitives ─────────────────────────────────────────────
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-bold tracking-widest uppercase text-purple-300 mb-3">
+    <p className="text-[10px] font-bold tracking-widest uppercase text-purple-600 mb-3">
       {children}
     </p>
   );
@@ -84,6 +84,25 @@ export default function HistoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  // Overall, Accuracy, and Fluency are the metrics most worth tracking
+  // day-to-day; Completeness and Prosody start hidden to keep the initial
+  // chart readable, and can be toggled on via the legend.
+  const [hiddenBreakdownKeys, setHiddenBreakdownKeys] = useState<Set<string>>(
+    new Set(["completenessAverage", "prosodyAverage"]),
+  );
+
+  const toggleBreakdownKey = (dataKey: unknown) => {
+    if (typeof dataKey !== "string") return;
+    setHiddenBreakdownKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(dataKey)) {
+        next.delete(dataKey);
+      } else {
+        next.add(dataKey);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     async function loadTrendData() {
@@ -127,10 +146,10 @@ export default function HistoryPage() {
   // ── Loading ───────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
+      <div className="min-h-dvh bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
         <AppNav />
         <div className="flex items-center justify-center min-h-[60vh]">
-          <p className="text-sm text-gray-400">Loading history…</p>
+          <p className="text-sm text-gray-500">Loading history…</p>
         </div>
       </div>
     );
@@ -139,7 +158,7 @@ export default function HistoryPage() {
   // ── Error ─────────────────────────────────────────────────
   if (errorMessage) {
     return (
-      <div className="min-h-screen bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
+      <div className="min-h-dvh bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
         <AppNav />
         <div className="max-w-3xl mx-auto px-5 md:px-8 py-8">
           <Card>
@@ -154,12 +173,12 @@ export default function HistoryPage() {
   // ── Empty ─────────────────────────────────────────────────
   if (trendData.length === 0) {
     return (
-      <div className="min-h-screen bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
+      <div className="min-h-dvh bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
         <AppNav />
         <div className="max-w-3xl mx-auto px-5 md:px-8 py-8">
           <Card>
             <SectionLabel>History</SectionLabel>
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-gray-500">
               No pronunciation history yet. Try scoring a sentence first.
             </p>
           </Card>
@@ -170,7 +189,7 @@ export default function HistoryPage() {
 
   // ── Main ──────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
+    <div className="min-h-dvh bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
       <AppNav />
 
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-4 md:py-6 flex flex-col gap-3 md:gap-4">
@@ -179,7 +198,7 @@ export default function HistoryPage() {
           const raw = latestPoint?.overallAverage;
           const scoreColor =
             raw == null
-              ? "text-gray-300"
+              ? "text-gray-500"
               : raw >= 80
                 ? "text-emerald-600"
                 : raw >= 60
@@ -192,7 +211,7 @@ export default function HistoryPage() {
               </h1>
               <div className="flex items-center gap-4 flex-wrap">
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] font-bold tracking-widest uppercase text-purple-300 mb-2">
+                  <p className="text-[10px] font-bold tracking-widest uppercase text-purple-600 mb-2">
                     Latest Score
                   </p>
                   <p className={`text-3xl font-black ${scoreColor}`}>
@@ -233,7 +252,7 @@ export default function HistoryPage() {
               className={`rounded-full px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm font-bold transition ${
                 activeTab === key
                   ? "bg-linear-to-r from-pink-400 to-violet-400 text-white shadow-sm"
-                  : "border border-purple-100 bg-white text-gray-400 hover:border-purple-200 hover:bg-purple-50 hover:text-purple-400"
+                  : "border border-purple-100 bg-white text-gray-500 hover:border-purple-200 hover:bg-purple-50 hover:text-purple-400"
               }`}
               onClick={() => setActiveTab(key)}
             >
@@ -254,7 +273,7 @@ export default function HistoryPage() {
             <>
               <div className="px-3 md:px-0 mb-3">
                 <SectionLabel>Overall Pron Trend</SectionLabel>
-                <p className="text-xs text-purple-300 font-medium">
+                <p className="text-xs text-purple-600 font-medium">
                   Daily average uses the last 5 attempts of each practice day.
                 </p>
               </div>
@@ -272,13 +291,13 @@ export default function HistoryPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#ede9fe" />
                       <XAxis
                         dataKey="practiceDate"
-                        tick={{ fontSize: 10, fill: "#c4b5fd" }}
+                        tick={{ fontSize: 11, fill: "#6b7280" }}
                         interval="preserveStartEnd"
                         tickFormatter={(v: string) => v.slice(5)}
                       />
                       <YAxis
                         domain={[0, 100]}
-                        tick={{ fontSize: 10, fill: "#c4b5fd" }}
+                        tick={{ fontSize: 11, fill: "#6b7280" }}
                         width={36}
                       />
                       <Tooltip
@@ -293,7 +312,7 @@ export default function HistoryPage() {
                         dataKey="overallAverage"
                         dot={false}
                         name="Daily last-5 avg"
-                        stroke="#a855f7"
+                        stroke="#9333ea"
                         strokeWidth={3}
                         type="linear"
                       />
@@ -301,16 +320,18 @@ export default function HistoryPage() {
                         dataKey="overallMovingAverage5Days"
                         dot={false}
                         name="5-day MA"
-                        stroke="#ec4899"
+                        stroke="#db2777"
                         strokeWidth={2}
+                        strokeDasharray="6 4"
                         type="linear"
                       />
                       <Line
                         dataKey="overallMovingAverage20Days"
                         dot={false}
                         name="20-day MA"
-                        stroke="#93c5fd"
+                        stroke="#2563eb"
                         strokeWidth={2}
+                        strokeDasharray="1 5"
                         type="linear"
                       />
                     </LineChart>
@@ -322,7 +343,7 @@ export default function HistoryPage() {
             <>
               <div className="px-3 md:px-0 mb-3">
                 <SectionLabel>Score Breakdown Trend</SectionLabel>
-                <p className="text-xs text-purple-300 font-medium">
+                <p className="text-xs text-purple-600 font-medium">
                   Each line shows the daily last-5 average for each score item.
                 </p>
               </div>
@@ -340,13 +361,13 @@ export default function HistoryPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#ede9fe" />
                       <XAxis
                         dataKey="practiceDate"
-                        tick={{ fontSize: 10, fill: "#c4b5fd" }}
+                        tick={{ fontSize: 11, fill: "#6b7280" }}
                         interval="preserveStartEnd"
                         tickFormatter={(v: string) => v.slice(5)}
                       />
                       <YAxis
                         domain={[0, 100]}
-                        tick={{ fontSize: 10, fill: "#c4b5fd" }}
+                        tick={{ fontSize: 11, fill: "#6b7280" }}
                         width={36}
                       />
                       <Tooltip
@@ -356,46 +377,60 @@ export default function HistoryPage() {
                           fontSize: 11,
                         }}
                       />
-                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
+                      <Legend
+                        wrapperStyle={{
+                          fontSize: 11,
+                          paddingTop: 10,
+                          cursor: "pointer",
+                        }}
+                        onClick={(e) => toggleBreakdownKey(e.dataKey)}
+                        iconSize={12}
+                        inactiveColor="#6b7280"
+                      />
                       <Line
                         dataKey="overallAverage"
                         dot={false}
                         name="Overall"
-                        stroke="#a855f7"
+                        stroke="#9333ea"
                         strokeWidth={3}
                         type="linear"
+                        hide={hiddenBreakdownKeys.has("overallAverage")}
                       />
                       <Line
                         dataKey="accuracyAverage"
                         dot={false}
                         name="Accuracy"
-                        stroke="#34d399"
+                        stroke="#059669"
                         strokeWidth={2}
                         type="linear"
+                        hide={hiddenBreakdownKeys.has("accuracyAverage")}
                       />
                       <Line
                         dataKey="fluencyAverage"
                         dot={false}
                         name="Fluency"
-                        stroke="#fb923c"
+                        stroke="#ea580c"
                         strokeWidth={2}
                         type="linear"
+                        hide={hiddenBreakdownKeys.has("fluencyAverage")}
                       />
                       <Line
                         dataKey="completenessAverage"
                         dot={false}
                         name="Completeness"
-                        stroke="#f472b6"
+                        stroke="#e11d48"
                         strokeWidth={2}
                         type="linear"
+                        hide={hiddenBreakdownKeys.has("completenessAverage")}
                       />
                       <Line
                         dataKey="prosodyAverage"
                         dot={false}
                         name="Prosody"
-                        stroke="#38bdf8"
+                        stroke="#0284c7"
                         strokeWidth={2}
                         type="linear"
+                        hide={hiddenBreakdownKeys.has("prosodyAverage")}
                       />
                     </LineChart>
                   </ResponsiveContainer>

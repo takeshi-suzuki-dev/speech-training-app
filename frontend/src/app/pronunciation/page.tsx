@@ -214,7 +214,7 @@ export default function PronunciationPage() {
   // ── Render ─────────────────────────────────────────────────
   // ═══════════════════════════════════════════════════════════
   return (
-    <div className="min-h-screen bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
+    <div className="min-h-dvh bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
       {/* ── Nav ── */}
       <AppNav />
 
