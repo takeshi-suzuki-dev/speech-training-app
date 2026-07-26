@@ -12,10 +12,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.takeshi.backend.auth.ClientIdentity;
 import com.takeshi.backend.dto.request.CreateTrainingAttemptRequest;
 import com.takeshi.backend.dto.response.DailyScoreTrendResponse;
 import com.takeshi.backend.dto.response.TrainingAttemptResponse;
 import com.takeshi.backend.service.TrainingAttemptService;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/training-attempts")
@@ -29,19 +32,46 @@ public class TrainingAttemptController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public TrainingAttemptResponse create(@RequestBody CreateTrainingAttemptRequest request) {
-        return trainingAttemptService.create(request);
+    public TrainingAttemptResponse create(
+            @RequestBody CreateTrainingAttemptRequest request,
+            HttpServletRequest httpRequest) {
+
+        UUID clientId = ClientIdentity.resolve(httpRequest);
+
+        return trainingAttemptService.create(withClientId(request, clientId));
     }
 
     @GetMapping
     public List<TrainingAttemptResponse> findRecentByClientId(
-            @RequestParam UUID clientId,
-            @RequestParam(defaultValue = "20") int limit) {
-        return trainingAttemptService.findRecentByClientId(clientId, limit);
+            @RequestParam(defaultValue = "20") int limit,
+            HttpServletRequest httpRequest) {
+
+        return trainingAttemptService.findRecentByClientId(
+                ClientIdentity.resolve(httpRequest), limit);
     }
 
     @GetMapping("/history-trends")
-    public List<DailyScoreTrendResponse> findDailyScoreTrends(@RequestParam UUID clientId) {
-        return trainingAttemptService.findDailyScoreTrends(clientId);
+    public List<DailyScoreTrendResponse> findDailyScoreTrends(HttpServletRequest httpRequest) {
+        return trainingAttemptService.findDailyScoreTrends(
+                ClientIdentity.resolve(httpRequest));
+    }
+
+    private CreateTrainingAttemptRequest withClientId(
+            CreateTrainingAttemptRequest request, UUID clientId) {
+
+        return new CreateTrainingAttemptRequest(
+                clientId,
+                request.userId(),
+                request.mode(),
+                request.sentenceId(),
+                request.referenceText(),
+                request.recognizedText(),
+                request.overallScore(),
+                request.accuracyScore(),
+                request.fluencyScore(),
+                request.completenessScore(),
+                request.prosodyScore(),
+                request.wordsJson(),
+                request.audioDurationMs());
     }
 }

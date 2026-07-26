@@ -7,7 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -16,15 +15,17 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.takeshi.backend.auth.ClientIdentity;
 import com.takeshi.backend.dto.request.CreateTrainingAttemptRequest;
 import com.takeshi.backend.dto.response.SentenceScores;
 import com.takeshi.backend.dto.response.SpeechEvaluateResponse;
 import com.takeshi.backend.service.PronunciationService;
 import com.takeshi.backend.service.TrainingAttemptService;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 @RestController
 @RequestMapping("/api/pronunciation")
-@CrossOrigin(origins = "http://localhost:3000")
 public class PronunciationController {
 
     private final PronunciationService pronunciationService;
@@ -45,9 +46,11 @@ public class PronunciationController {
     public ResponseEntity<SpeechEvaluateResponse> score(
             @RequestParam("audio") MultipartFile audio,
             @RequestParam("referenceText") String referenceText,
-            @RequestParam("clientId") UUID clientId,
             @RequestParam(value = "mode", defaultValue = "sentence") String mode,
-            @RequestParam(value = "sentenceId", required = false) UUID sentenceId) {
+            @RequestParam(value = "sentenceId", required = false) UUID sentenceId,
+            HttpServletRequest httpRequest) {
+
+        UUID clientId = ClientIdentity.resolve(httpRequest);
 
         SpeechEvaluateResponse result = pronunciationService.score(audio, referenceText);
         SentenceScores scores = result.getSentenceScores();
