@@ -120,8 +120,7 @@ on public.template_favorites(sentence_template_id);
 
 create table public.training_attempts (
   id uuid not null default gen_random_uuid(),
-  client_id uuid not null,
-  user_id uuid null,
+  user_id uuid not null,
   mode text not null,
   sentence_id uuid null,
   reference_text text not null,
