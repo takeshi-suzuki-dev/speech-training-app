@@ -10,7 +10,7 @@ Phase 1 was completed as a fixed-template MVP. The application can load fixed pr
 
 Phase 2 added Firebase authentication, an application-level allowlist, user-defined categories and sentence templates, favorites, and a landing page with a trial access request flow. Authentication and authorization are now consistently applied across all protected backend APIs.
 
-The app is ready for a controlled recruiter demo, subject to deployment.
+The app is deployed on AWS ECS/Fargate and ready for a controlled recruiter demo at https://d22r3g893vf4i5.cloudfront.net.
 
 ## Current Position
 
@@ -63,14 +63,19 @@ The app is currently positioned as:
 ## Remaining Work
 
 - Multiple sample-audio voice options are implemented at the database/design level (`sentence_template_voice_options`) but not yet exposed through the API or UI. This is deferred to Phase 3.
-- Deployment to ECS/Fargate. The backend has no container image yet, Firebase credentials resolve through Application Default Credentials (which finds nothing on Fargate), and the allowed CORS origins have to be set to the deployed frontend's origin.
+- Images are tagged `latest`, which makes it impossible to tell which build is running and allowed a stale image to be deployed once. Tagging by commit hash is the fix.
+- Deployment is manual, following `infra/DEPLOY.md`. No pipeline yet.
 - Automated coverage stops at the shared pronunciation components. The page, the hooks, and the backend have none, so the manual testing checklist (`phase2-manual-testing-checklist.md`) remains the primary regression check.
 
 ## Main Risk (Mitigated)
 
 Previously, the main risk was that the live app could become accessible to anyone who knew the URL and could sign in with Google. This is now mitigated: Firebase Authentication alone is no longer sufficient to use the app, because `FirebaseAuthenticationInterceptor` enforces the allowlist check on every protected request before it reaches a controller.
 
-The remaining operational risk is standard for any hosted demo: the allowed CORS origins and the deployment's environment variables must be set correctly before the production URL is shared. Firebase credentials in particular cannot resolve the way they do locally, and the app will not start without them.
+The deployment risks anticipated here materialized as predicted and have been resolved. Firebase credentials did not resolve on Fargate, because ECS can inject secrets only as environment variables while the Admin SDK expects a file path; `FirebaseConfig` now reads the service account from `FIREBASE_CREDENTIALS_JSON` and falls back to Application Default Credentials locally. CORS also failed even though the deployed frontend and API share an origin, because browsers attach an `Origin` header to non-GET requests regardless; allowed origins now come from `CORS_ALLOWED_ORIGINS`.
+
+One issue was not anticipated. Practice history was keyed on a browser-generated `client_id` that the backend accepted from the request without checking it belonged to the caller, so any authenticated user could read another user's history by supplying their id. The column is now `user_id`, derived server-side from the authenticated Firebase UID. See `deployment-architecture.md`.
+
+The remaining operational risk is the Supabase free-tier connection cap of 15 session-mode clients, which a rolling deployment can still approach if the HikariCP pool size is raised.
 
 ## Out of Scope for This Stage
 
