@@ -1,0 +1,63 @@
+{
+  "family": "cadence-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "arn:aws:iam::459100131283:role/cadenceTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "459100131283.dkr.ecr.ap-northeast-1.amazonaws.com/cadence-backend:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "AZURE_SPEECH_KEY",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-1:459100131283:secret:cadence/backend-UPZgnt:AZURE_SPEECH_KEY::"
+        },
+        {
+          "name": "AZURE_SPEECH_REGION",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-1:459100131283:secret:cadence/backend-UPZgnt:AZURE_SPEECH_REGION::"
+        },
+        {
+          "name": "ELEVENLABS_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-1:459100131283:secret:cadence/backend-UPZgnt:ELEVENLABS_API_KEY::"
+        },
+        {
+          "name": "SUPABASE_DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-1:459100131283:secret:cadence/backend-UPZgnt:SUPABASE_DB_PASSWORD::"
+        },
+        {
+          "name": "SUPABASE_SERVICE_ROLE_KEY",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-1:459100131283:secret:cadence/backend-UPZgnt:SUPABASE_SERVICE_ROLE_KEY::"
+        },
+        {
+          "name": "SUPABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-1:459100131283:secret:cadence/backend-UPZgnt:SUPABASE_URL::"
+        },
+        {
+          "name": "FIREBASE_CREDENTIALS_JSON",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-1:459100131283:secret:cadence/firebase-service-account-pWm7jC"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/cadence-backend",
+          "awslogs-region": "ap-northeast-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
