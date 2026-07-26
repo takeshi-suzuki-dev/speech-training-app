@@ -8,15 +8,15 @@ import com.takeshi.backend.exception.AppAccessDeniedException;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
- * Derives the training-history client identifier from the authenticated user
+ * Derives the training-history user identifier from the authenticated user
  * instead of trusting a client-supplied value.
  *
  * <p>The same Firebase UID always yields the same UUID, so existing rows can be
  * migrated with a one-off UPDATE and history follows the user across devices.
  */
-public final class ClientIdentity {
+public final class UserIdentity {
 
-    private ClientIdentity() {
+    private UserIdentity() {
     }
 
     public static UUID resolve(HttpServletRequest request) {

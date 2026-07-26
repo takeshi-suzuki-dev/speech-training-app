@@ -8,7 +8,6 @@ import com.takeshi.backend.entity.TrainingAttempt;
 
 public record TrainingAttemptResponse(
         UUID id,
-        UUID clientId,
         UUID userId,
         String mode,
         UUID sentenceId,
@@ -26,7 +25,6 @@ public record TrainingAttemptResponse(
     public static TrainingAttemptResponse from(TrainingAttempt attempt) {
         return new TrainingAttemptResponse(
                 attempt.getId(),
-                attempt.getClientId(),
                 attempt.getUserId(),
                 attempt.getMode(),
                 attempt.getSentenceId(),

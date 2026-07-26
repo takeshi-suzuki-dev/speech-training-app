@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.takeshi.backend.auth.ClientIdentity;
+import com.takeshi.backend.auth.UserIdentity;
 import com.takeshi.backend.dto.request.CreateTrainingAttemptRequest;
 import com.takeshi.backend.dto.response.DailyScoreTrendResponse;
 import com.takeshi.backend.dto.response.TrainingAttemptResponse;
@@ -36,32 +36,31 @@ public class TrainingAttemptController {
             @RequestBody CreateTrainingAttemptRequest request,
             HttpServletRequest httpRequest) {
 
-        UUID clientId = ClientIdentity.resolve(httpRequest);
+        UUID userId = UserIdentity.resolve(httpRequest);
 
-        return trainingAttemptService.create(withClientId(request, clientId));
+        return trainingAttemptService.create(withUserId(request, userId));
     }
 
     @GetMapping
-    public List<TrainingAttemptResponse> findRecentByClientId(
+    public List<TrainingAttemptResponse> findRecentByUserId(
             @RequestParam(defaultValue = "20") int limit,
             HttpServletRequest httpRequest) {
 
-        return trainingAttemptService.findRecentByClientId(
-                ClientIdentity.resolve(httpRequest), limit);
+        return trainingAttemptService.findRecentByUserId(
+                UserIdentity.resolve(httpRequest), limit);
     }
 
     @GetMapping("/history-trends")
     public List<DailyScoreTrendResponse> findDailyScoreTrends(HttpServletRequest httpRequest) {
         return trainingAttemptService.findDailyScoreTrends(
-                ClientIdentity.resolve(httpRequest));
+                UserIdentity.resolve(httpRequest));
     }
 
-    private CreateTrainingAttemptRequest withClientId(
-            CreateTrainingAttemptRequest request, UUID clientId) {
+    private CreateTrainingAttemptRequest withUserId(
+            CreateTrainingAttemptRequest request, UUID userId) {
 
         return new CreateTrainingAttemptRequest(
-                clientId,
-                request.userId(),
+                userId,
                 request.mode(),
                 request.sentenceId(),
                 request.referenceText(),

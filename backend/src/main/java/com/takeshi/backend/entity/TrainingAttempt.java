@@ -25,10 +25,8 @@ public class TrainingAttempt {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @Column(name = "client_id", nullable = false)
-    private UUID clientId;
-
-    @Column(name = "user_id")
+    /** Derived from the authenticated Firebase UID. See auth/UserIdentity. */
+    @Column(name = "user_id", nullable = false)
     private UUID userId;
 
     @Column(name = "mode", nullable = false)
@@ -77,7 +75,6 @@ public class TrainingAttempt {
     }
 
     public TrainingAttempt(
-            UUID clientId,
             UUID userId,
             String mode,
             UUID sentenceId,
@@ -91,7 +88,6 @@ public class TrainingAttempt {
             String wordsJson,
             Integer audioDurationMs,
             OffsetDateTime scoredAt) {
-        this.clientId = clientId;
         this.userId = userId;
         this.mode = mode;
         this.sentenceId = sentenceId;
@@ -109,10 +105,6 @@ public class TrainingAttempt {
 
     public UUID getId() {
         return id;
-    }
-
-    public UUID getClientId() {
-        return clientId;
     }
 
     public UUID getUserId() {

@@ -80,8 +80,8 @@ public class SentenceTemplateService {
     }
 
     @Transactional(readOnly = true)
-    public List<TrainingAttemptResponse> findLatestBySentenceForClient(UUID clientId) {
-        return trainingAttemptRepository.findLatestBySentenceIdForClient(clientId)
+    public List<TrainingAttemptResponse> findLatestBySentenceForUser(UUID userId) {
+        return trainingAttemptRepository.findLatestBySentenceIdForUser(userId)
                 .stream()
                 .map(TrainingAttemptResponse::from)
                 .toList();

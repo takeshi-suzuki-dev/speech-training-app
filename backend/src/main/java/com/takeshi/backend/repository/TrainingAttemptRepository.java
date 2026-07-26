@@ -13,17 +13,17 @@ import com.takeshi.backend.repository.projection.DailyScoreTrendProjection;
 
 public interface TrainingAttemptRepository extends JpaRepository<TrainingAttempt, UUID> {
 
-    List<TrainingAttempt> findByClientIdOrderByScoredAtDesc(UUID clientId, Pageable pageable);
+    List<TrainingAttempt> findByUserIdOrderByScoredAtDesc(UUID userId, Pageable pageable);
 
     @Query(value = """
             SELECT DISTINCT ON (sentence_id) *
             FROM training_attempts
-            WHERE client_id = :clientId
+            WHERE user_id = :userId
               AND sentence_id IS NOT NULL
               AND overall_score IS NOT NULL
             ORDER BY sentence_id, scored_at DESC
             """, nativeQuery = true)
-    List<TrainingAttempt> findLatestBySentenceIdForClient(@Param("clientId") UUID clientId);
+    List<TrainingAttempt> findLatestBySentenceIdForUser(@Param("userId") UUID userId);
 
     @Query(value = """
             WITH ranked_attempts AS (
@@ -39,7 +39,7 @@ public interface TrainingAttemptRepository extends JpaRepository<TrainingAttempt
                         ORDER BY scored_at DESC, id DESC
                     ) AS attempt_rank
                 FROM training_attempts
-                WHERE client_id = :clientId
+                WHERE user_id = :userId
                   AND scored_at >= now() - interval '1 year'
                   AND overall_score IS NOT NULL
             ),
@@ -73,5 +73,5 @@ public interface TrainingAttemptRepository extends JpaRepository<TrainingAttempt
             FROM daily_averages
             ORDER BY practice_date
             """, nativeQuery = true)
-    List<DailyScoreTrendProjection> findDailyScoreTrends(@Param("clientId") UUID clientId);
+    List<DailyScoreTrendProjection> findDailyScoreTrends(@Param("userId") UUID userId);
 }

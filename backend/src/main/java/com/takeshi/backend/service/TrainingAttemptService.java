@@ -28,7 +28,6 @@ public class TrainingAttemptService {
         validateCreateRequest(request);
 
         TrainingAttempt attempt = new TrainingAttempt(
-                request.clientId(),
                 request.userId(),
                 request.mode(),
                 request.sentenceId(),
@@ -48,22 +47,22 @@ public class TrainingAttemptService {
     }
 
     @Transactional(readOnly = true)
-    public List<TrainingAttemptResponse> findRecentByClientId(UUID clientId, int limit) {
+    public List<TrainingAttemptResponse> findRecentByUserId(UUID userId, int limit) {
         int safeLimit = Math.min(Math.max(limit, 1), 50);
 
-        return trainingAttemptRepository.findByClientIdOrderByScoredAtDesc(clientId, PageRequest.of(0, safeLimit))
+        return trainingAttemptRepository.findByUserIdOrderByScoredAtDesc(userId, PageRequest.of(0, safeLimit))
                 .stream()
                 .map(TrainingAttemptResponse::from)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public List<DailyScoreTrendResponse> findDailyScoreTrends(UUID clientId) {
-        if (clientId == null) {
-            throw new IllegalArgumentException("clientId is required.");
+    public List<DailyScoreTrendResponse> findDailyScoreTrends(UUID userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId is required.");
         }
 
-        return trainingAttemptRepository.findDailyScoreTrends(clientId)
+        return trainingAttemptRepository.findDailyScoreTrends(userId)
                 .stream()
                 .map(
                         trend -> new DailyScoreTrendResponse(
@@ -79,8 +78,8 @@ public class TrainingAttemptService {
     }
 
     private void validateCreateRequest(CreateTrainingAttemptRequest request) {
-        if (request.clientId() == null) {
-            throw new IllegalArgumentException("clientId is required.");
+        if (request.userId() == null) {
+            throw new IllegalArgumentException("userId is required.");
         }
 
         if (request.mode() == null || request.mode().isBlank()) {

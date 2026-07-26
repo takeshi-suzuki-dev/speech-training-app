@@ -15,7 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.takeshi.backend.auth.ClientIdentity;
+import com.takeshi.backend.auth.UserIdentity;
 import com.takeshi.backend.dto.request.CreateTrainingAttemptRequest;
 import com.takeshi.backend.dto.response.SentenceScores;
 import com.takeshi.backend.dto.response.SpeechEvaluateResponse;
@@ -50,7 +50,7 @@ public class PronunciationController {
             @RequestParam(value = "sentenceId", required = false) UUID sentenceId,
             HttpServletRequest httpRequest) {
 
-        UUID clientId = ClientIdentity.resolve(httpRequest);
+        UUID userId = UserIdentity.resolve(httpRequest);
 
         SpeechEvaluateResponse result = pronunciationService.score(audio, referenceText);
         SentenceScores scores = result.getSentenceScores();
@@ -67,8 +67,7 @@ public class PronunciationController {
         try {
             trainingAttemptService.create(
                     new CreateTrainingAttemptRequest(
-                            clientId,
-                            null,
+                            userId,
                             mode,
                             sentenceId,
                             referenceText,

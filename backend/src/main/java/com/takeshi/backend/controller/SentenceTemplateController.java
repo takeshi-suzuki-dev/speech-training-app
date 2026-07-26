@@ -24,7 +24,7 @@ import com.takeshi.backend.dto.request.SaveSentenceCategoryRequest;
 import com.takeshi.backend.dto.request.SaveSentenceTemplateRequest;
 import com.takeshi.backend.dto.response.SentenceCategoryResponse;
 import com.takeshi.backend.dto.response.SentenceTemplateResponse;
-import com.takeshi.backend.auth.ClientIdentity;
+import com.takeshi.backend.auth.UserIdentity;
 import com.takeshi.backend.dto.response.TrainingAttemptResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -104,9 +104,9 @@ public class SentenceTemplateController {
     }
 
     @GetMapping("/sentence-latest-scores")
-    public List<TrainingAttemptResponse> findLatestBySentenceForClient(HttpServletRequest httpRequest) {
-        return sentenceTemplateService.findLatestBySentenceForClient(
-                ClientIdentity.resolve(httpRequest));
+    public List<TrainingAttemptResponse> findLatestBySentenceForUser(HttpServletRequest httpRequest) {
+        return sentenceTemplateService.findLatestBySentenceForUser(
+                UserIdentity.resolve(httpRequest));
     }
 
     @DeleteMapping("/sentence-categories/{categoryId}")

@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 public record CreateTrainingAttemptRequest(
-        UUID clientId,
         UUID userId,
         String mode,
         UUID sentenceId,
