@@ -4,7 +4,9 @@ Turn any sentence you want to master — interview answers, your elevator pitch,
 
 The live application is branded "Cadence" in its UI; "Speech Training App" is this repository's project name.
 
-This project started with a Proof of Concept (PoC) to validate pronunciation scoring and sample audio generation, and has since completed Phase 1 (fixed-template MVP) and Phase 2 (authentication and allowlist-gated access).
+This project started with a Proof of Concept (PoC) to validate pronunciation scoring and sample audio generation, and has since completed Phase 1 (fixed-template MVP) and Phase 2 (authentication and allowlist-gated access). Both tiers are deployed and running on AWS ECS/Fargate.
+
+Live demo: https://d22r3g893vf4i5.cloudfront.net (access is allowlist-gated; see the landing page to request access)
 
 ---
 
@@ -26,7 +28,7 @@ This project is developed in phases:
 
 - Phase 0: PoC — completed
 - Phase 1: Fixed-template MVP — completed
-- Phase 2: Authentication, allowlist-gated access, and user-defined practice sentences — completed
+- Phase 2: Authentication, allowlist-gated access, user-defined practice sentences, and AWS deployment — completed
 - Phase 3: Plan-based features, billing, multiple sample-audio voice options, and IT engineer vocabulary practice
 - Phase 4: Interview FAQ and free-answer practice
 
@@ -55,6 +57,12 @@ For details:
 
 - [Phase 2 DB / Storage Design (EN)](docs/en/phase2-db-storage-design.md)
 - [Phase 2 DB / ストレージ設計書 (JP)](docs/jp/phase2_DB_ストレージ設計書.md)
+
+## Infrastructure
+
+- [Deployment Architecture (EN)](docs/en/deployment-architecture.md)
+- [デプロイ構成 (JP)](docs/jp/デプロイ構成.md)
+- [Deploy Runbook (EN)](infra/DEPLOY.md)
 
 ## Design and API
 
@@ -101,6 +109,14 @@ For details:
 - ElevenLabs Text-to-Speech
 - Supabase PostgreSQL
 - Supabase Storage
+
+### Infrastructure
+
+- AWS ECS/Fargate (both frontend and backend containers)
+- Application Load Balancer with path-based routing
+- CloudFront (TLS termination)
+- ECR, Secrets Manager, CloudWatch Logs
+- Docker multi-stage builds
 
 ---
 
@@ -166,15 +182,26 @@ Implemented scope:
 - Landing page with a trial access request form
 - Account menu (signed-in email + logout) in the app header
 
+Deployment scope, completed after the application work above:
+
+- Frontend and backend containerized and deployed to AWS ECS/Fargate
+- Single Application Load Balancer routing `/api/*` to the backend and everything else to the frontend, so production is same-origin
+- CloudFront in front of the load balancer for HTTPS, which Firebase Authentication requires
+- All seven runtime secrets injected from Secrets Manager; `FirebaseConfig` accepts the service account as a JSON string with a fallback to Application Default Credentials for local development
+- Allowed CORS origins moved from a hardcoded value to `CORS_ALLOWED_ORIGINS`
+- Practice history keyed on a `user_id` derived server-side from the authenticated Firebase UID, replacing a browser-generated id that was accepted from the client — this closed an authorization gap and made history follow the user across devices
+
 Remaining before broader use:
 
-- Deployment to AWS ECS/Fargate, including production CORS configuration (currently allows `http://localhost:3000` only) and Firebase credentials supplied through the environment
 - Multiple sample-audio voice options (implemented at the database/design level; not yet exposed via API or UI — deferred to Phase 3)
+- Image tagging by commit hash instead of `latest`
+- Automated deployment pipeline; deployments are currently manual, following the runbook
 
 For details:
 
 - [Phase 2 Current Status](docs/en/phase2-current-status.md)
 - [Phase 2 Controlled Demo Requirements](docs/en/phase2-controlled-demo-requirements.md)
+- [Deployment Architecture](docs/en/deployment-architecture.md)
 
 ---
 
