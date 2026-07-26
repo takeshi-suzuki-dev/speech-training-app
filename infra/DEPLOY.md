@@ -79,6 +79,36 @@ aws cloudfront create-invalidation \
 
 ## Verify
 
+### 1. Wait for the rollout to finish
+
+```bash
+# Backend
+aws ecs describe-services --cluster cadence-cluster --services cadence-backend-svc \
+  --region ap-northeast-1 \
+  --query 'services[0].deployments[].{Status:status,TaskDef:taskDefinition,Running:runningCount,Rollout:rolloutState}' --output table
+
+#Frontend
+aws ecs describe-services --cluster cadence-cluster --services cadence-frontend-svc \
+  --region ap-northeast-1 \
+  --query 'services[0].deployments[].{Status:status,TaskDef:taskDefinition,Running:runningCount,Rollout:rolloutState}' --output table
+```
+
+Repeat until a single row remains: `PRIMARY` / `COMPLETED` / `Running 1`.
+
+| What is shown                      | Meaning                                                              |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| `PRIMARY IN_PROGRESS` + `ACTIVE`   | Still switching over. The old task is still serving traffic.         |
+| `PRIMARY IN_PROGRESS`, Running 0   | New task is failing to start — check the logs below.                 |
+| `PRIMARY IN_PROGRESS` + `DRAINING` | Old task stopped, waiting on two consecutive health checks (~1 min). |
+| `PRIMARY COMPLETED`, Running 1     | Done. The new image is live.                                         |
+
+Takes 2-4 minutes normally. If it loops for more than ~10 minutes, the task is
+crash-looping; go to the logs.
+
+Same command for the frontend, with `--services cadence-frontend-svc`.
+
+### 2. Logs and target health
+
 ```bash
 # Backend logs (stack trace lines removed)
 aws logs tail /ecs/cadence-backend --since 10m --region ap-northeast-1 \
@@ -96,7 +126,8 @@ aws elbv2 describe-target-health \
   --query 'TargetHealthDescriptions[].{Target:Target.Id,State:TargetHealth.State,Reason:TargetHealth.Reason}' --output table
 ```
 
-`draining` が続く場合はログを確認する。起動に約50秒かかるため、ヘルスチェック猶予は 120 秒に設定してある。
+If targets stay `draining`, check the logs above. The app takes about 50 seconds
+to start, which is why the health check grace period is set to 120 seconds.
 
 ---
 
@@ -119,14 +150,14 @@ Rough monthly cost: ALB ~$18, Fargate tasks ~$36, CloudFront ~$0 (free tier).
 
 ## Resource reference
 
-| Resource | Value |
-|---|---|
-| Cluster | `cadence-cluster` |
-| Services | `cadence-backend-svc` / `cadence-frontend-svc` |
-| ALB DNS | `cadence-alb-1420556356.ap-northeast-1.elb.amazonaws.com` |
-| CloudFront | `d22r3g893vf4i5.cloudfront.net` (ID `E2X7DMO9FGPFKC`) |
-| Listener rule | `/api/*` → backend, default → frontend |
-| Secrets | `cadence/backend`, `cadence/firebase-service-account` |
-| Task exec role | `cadenceTaskExecutionRole` |
-| Task SG | `sg-039ae41d9dd7d9d27` (inbound 8080/3000 from ALB SG only) |
-| ALB SG | `sg-0a10729408a8be243` (inbound 80 from internet) |
+| Resource       | Value                                                       |
+| -------------- | ----------------------------------------------------------- |
+| Cluster        | `cadence-cluster`                                           |
+| Services       | `cadence-backend-svc` / `cadence-frontend-svc`              |
+| ALB DNS        | `cadence-alb-1420556356.ap-northeast-1.elb.amazonaws.com`   |
+| CloudFront     | `d22r3g893vf4i5.cloudfront.net` (ID `E2X7DMO9FGPFKC`)       |
+| Listener rule  | `/api/*` → backend, default → frontend                      |
+| Secrets        | `cadence/backend`, `cadence/firebase-service-account`       |
+| Task exec role | `cadenceTaskExecutionRole`                                  |
+| Task SG        | `sg-039ae41d9dd7d9d27` (inbound 8080/3000 from ALB SG only) |
+| ALB SG         | `sg-0a10729408a8be243` (inbound 80 from internet)           |

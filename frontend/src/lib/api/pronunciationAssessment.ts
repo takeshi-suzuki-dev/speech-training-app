@@ -1,7 +1,6 @@
 import { apiFetch } from "@/lib/api/apiFetch";
 import { getAccessDeniedMessage } from "@/lib/api/apiError";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
-import { getOrCreateClientId } from "../clientId";
 
 export async function scorePronunciation(
   audioFile: File,
@@ -12,7 +11,6 @@ export async function scorePronunciation(
 
   formData.append("audio", audioFile);
   formData.append("referenceText", referencetext);
-  formData.append("clientId", getOrCreateClientId());
   formData.append("mode", "sentence");
 
   if (sentenceId) {

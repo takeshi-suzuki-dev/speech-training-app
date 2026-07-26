@@ -1,9 +1,7 @@
 import { apiFetch } from "@/lib/api/apiFetch";
-import { getOrCreateClientId } from "@/lib/clientId";
 
 export type TrainingAttemptResult = {
   id: string;
-  clientId: string;
   userId: string | null;
   mode: string;
   sentenceId: string | null;
@@ -34,11 +32,7 @@ export type DailyScoreTrendResult = {
 export async function fetchLatestAssessmentResultsBySentence(): Promise<
   TrainingAttemptResult[]
 > {
-  const clientId = getOrCreateClientId();
-
-  const response = await apiFetch(
-    `/api/sentence-latest-scores?clientId=${encodeURIComponent(clientId)}`,
-  );
+  const response = await apiFetch("/api/sentence-latest-scores");
 
   if (!response.ok) {
     throw new Error(
@@ -52,13 +46,7 @@ export async function fetchLatestAssessmentResultsBySentence(): Promise<
 export async function fetchDailyScoreTrends(): Promise<
   DailyScoreTrendResult[]
 > {
-  const clientId = getOrCreateClientId();
-
-  const response = await apiFetch(
-    `/api/training-attempts/history-trends?clientId=${encodeURIComponent(
-      clientId,
-    )}`,
-  );
+  const response = await apiFetch("/api/training-attempts/history-trends");
 
   if (!response.ok) {
     throw new Error(`Failed to fetch daily score trends: ${response.status}`);
