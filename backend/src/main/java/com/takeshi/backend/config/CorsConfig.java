@@ -1,5 +1,6 @@
 package com.takeshi.backend.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -13,6 +14,14 @@ public class CorsConfig {
 
     private final FirebaseAuthenticationInterceptor firebaseAuthenticationInterceptor;
 
+    /**
+     * Comma-separated list of allowed origins.
+     * Defaults to local development; production origins are supplied via
+     * the CORS_ALLOWED_ORIGINS environment variable.
+     */
+    @Value("${app.cors.allowed-origins}")
+    private String[] allowedOrigins;
+
     public CorsConfig(FirebaseAuthenticationInterceptor firebaseAuthenticationInterceptor) {
         this.firebaseAuthenticationInterceptor = firebaseAuthenticationInterceptor;
     }
@@ -23,7 +32,7 @@ public class CorsConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/api/**")
-                        .allowedOrigins("http://localhost:3000")
+                        .allowedOrigins(allowedOrigins)
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowedHeaders("*");
             }
