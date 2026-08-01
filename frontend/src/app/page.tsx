@@ -30,7 +30,6 @@ const FEATURES = [
   },
 ];
 
-
 // Official logos via Simple Icons CDN (https://simpleicons.org).
 // Note: Azure has no official icon in Simple Icons (and Microsoft's brand
 // guidelines ask that its product icons not be used to represent
@@ -486,7 +485,7 @@ export default function Home() {
 
         {/* Demo screenshot / video placeholder */}
         <div className="bg-white rounded-2xl shadow-sm p-3">
-          <div className="aspect-video rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-purple-200">
+          <div className="aspect-video rounded-xl bg-linear-to-br from-purple-50 to-pink-50 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-purple-200">
             <span className="text-3xl">▶️</span>
             <p className="text-xs font-bold text-purple-400">
               Demo video / screenshot goes here
@@ -540,7 +539,8 @@ export default function Home() {
             <div className="flex flex-col items-center justify-center text-center gap-2 bg-emerald-50 rounded-xl p-6">
               <span className="text-3xl">✅</span>
               <p className="text-sm font-bold text-emerald-700">
-                Request received. I&apos;ll get back to you within 2&ndash;3 days.
+                Request received. I&apos;ll get back to you within
+                2&ndash;3days.
               </p>
               <p className="text-xs text-emerald-600">
                 Access will be granted to the Google account at the address you

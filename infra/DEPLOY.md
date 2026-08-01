@@ -42,7 +42,8 @@ aws ecs register-task-definition \
 
 aws ecs update-service \
   --cluster cadence-cluster --service cadence-backend-svc \
-  --task-definition cadence-backend --force-new-deployment \
+  --task-definition cadence-backend \
+  --desired-count 1　--force-new-deployment \
   --region ap-northeast-1
 ```
 
@@ -67,6 +68,7 @@ docker push 459100131283.dkr.ecr.ap-northeast-1.amazonaws.com/cadence-frontend:l
 aws ecs update-service \
   --cluster cadence-cluster \
   --service cadence-frontend-svc \
+  --desired-count 1 \
   --force-new-deployment \
   --region ap-northeast-1
 

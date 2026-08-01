@@ -1,36 +1,49 @@
-export type SentenceScores = {
-  accuracy: number;
-  fluency: number;
-  completeness: number;
-  prosody: number;
-  pron: number;
-  additionalScores?: Record<string, unknown>;
-};
+import { z } from "zod";
 
-export type WordResult = {
-  word: string;
-  scores: Record<string, unknown>;
-  errorType: string;
-  offset: number;
-  duration: number;
-};
+const scoreMapSchema = z.record(z.string(), z.unknown());
 
-export type PhonemeResult = {
-  word: string;
-  phoneme: string;
-  scores: Record<string, unknown>;
-  expectedIpa: string;
-  candidates: string[];
-  offset: number;
-  duration: number;
-};
+export const sentenceScoresSchema = z.object({
+  accuracy: z.number(),
+  fluency: z.number(),
+  completeness: z.number(),
+  prosody: z.number(),
+  pron: z.number(),
+  additionalScores: scoreMapSchema.optional(),
+});
 
-export type SpeechEvaluateResponse = {
-  transcript: string;
-  recognitionStatus: string;
-  overallScore: number;
-  sentenceScores: SentenceScores;
-  words: WordResult[];
-  phonemes: PhonemeResult[];
-  rawJson: unknown;
-};
+export const wordResultSchema = z.object({
+  word: z.string(),
+  scores: scoreMapSchema,
+  errorType: z.string(),
+  offset: z.number(),
+  duration: z.number(),
+});
+
+export const phonemeResultSchema = z.object({
+  word: z.string(),
+  phoneme: z.string(),
+  scores: scoreMapSchema,
+  expectedIpa: z.string(),
+  candidates: z.array(z.string()),
+  offset: z.number(),
+  duration: z.number(),
+});
+
+export const speechEvaluateResponseSchema = z.object({
+  transcript: z.string(),
+  recognitionStatus: z.string(),
+  overallScore: z.number(),
+  sentenceScores: sentenceScoresSchema,
+  words: z.array(wordResultSchema),
+  phonemes: z.array(phonemeResultSchema),
+  // Azure's untouched payload, kept for debugging. Its shape is Azure's to
+  // change, so it is deliberately not validated.
+  rawJson: z.unknown(),
+});
+
+export type SentenceScores = z.infer<typeof sentenceScoresSchema>;
+export type WordResult = z.infer<typeof wordResultSchema>;
+export type PhonemeResult = z.infer<typeof phonemeResultSchema>;
+export type SpeechEvaluateResponse = z.infer<
+  typeof speechEvaluateResponseSchema
+>;

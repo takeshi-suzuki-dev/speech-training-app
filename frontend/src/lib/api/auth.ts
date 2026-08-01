@@ -1,5 +1,8 @@
+import { z } from "zod";
+
 import { apiFetch } from "@/lib/api/apiFetch";
 import { getAccessDeniedMessage } from "@/lib/api/apiError";
+import { parseJsonResponse } from "@/lib/api/parseResponse";
 
 // Mirrors the existing lib/api/tts.ts and lib/api/pronunciationAssessment.ts
 // convention: throw an Error with a user-facing message on non-2xx, rather
@@ -15,10 +18,12 @@ import { getAccessDeniedMessage } from "@/lib/api/apiError";
 //   403 -> allowlist refused the request; the reason is in the response body
 //   401 -> token missing/invalid/expired
 
-export type AuthMeResponse = {
-  uid: string;
-  email: string;
-};
+const authMeResponseSchema = z.object({
+  uid: z.string(),
+  email: z.string(),
+});
+
+export type AuthMeResponse = z.infer<typeof authMeResponseSchema>;
 
 export async function fetchAuthMe(): Promise<AuthMeResponse> {
   const response = await apiFetch("/api/auth/me");
@@ -27,7 +32,11 @@ export async function fetchAuthMe(): Promise<AuthMeResponse> {
     throw new Error(await getAuthMeErrorMessage(response));
   }
 
-  return response.json();
+  return parseJsonResponse(
+    response,
+    authMeResponseSchema,
+    "Failed to read the account response",
+  );
 }
 
 async function getAuthMeErrorMessage(response: Response): Promise<string> {

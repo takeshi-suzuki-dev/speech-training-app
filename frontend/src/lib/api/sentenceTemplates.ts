@@ -1,36 +1,43 @@
-import { apiFetch } from "@/lib/api/apiFetch";
+import { z } from "zod";
 
-export type SentenceCategory = {
-  id: string;
-  categoryKey: string | null;
-  displayName: string;
-  description: string | null;
-  sortOrder: number;
-  userCategory: boolean;
-};
+import { apiFetch } from "@/lib/api/apiFetch";
+import { parseJsonResponse } from "@/lib/api/parseResponse";
+
+const sentenceCategorySchema = z.object({
+  id: z.string(),
+  categoryKey: z.string().nullable(),
+  displayName: z.string(),
+  description: z.string().nullable(),
+  sortOrder: z.number(),
+  userCategory: z.boolean(),
+});
+
+export type SentenceCategory = z.infer<typeof sentenceCategorySchema>;
 
 export type SaveSentenceCategoryRequest = {
   displayName: string;
   description: string | null;
 };
 
-export type SentenceTemplate = {
-  id: string;
-  categoryId: string;
-  templateKey: string | null;
-  title: string;
-  displayText: string;
-  scoringText: string;
-  sampleAudioText: string;
-  difficulty: string;
-  sortOrder: number;
+const sentenceTemplateSchema = z.object({
+  id: z.string(),
+  categoryId: z.string(),
+  templateKey: z.string().nullable(),
+  title: z.string(),
+  displayText: z.string(),
+  scoringText: z.string(),
+  sampleAudioText: z.string(),
+  difficulty: z.string(),
+  sortOrder: z.number(),
   /**
    * True when the signed-in user owns this template. Seed templates are system
    * content with no owner and are read-only: the API rejects updates to them,
    * so the edit affordance is hidden. To change a seed phrase, create your own.
    */
-  userTemplate: boolean;
-};
+  userTemplate: z.boolean(),
+});
+
+export type SentenceTemplate = z.infer<typeof sentenceTemplateSchema>;
 
 export type SaveSentenceTemplateRequest = {
   categoryId: string;
@@ -48,7 +55,11 @@ export async function fetchSentenceCategories(): Promise<SentenceCategory[]> {
     throw new Error("Failed to fetch sentence categories.");
   }
 
-  return response.json();
+  return parseJsonResponse(
+    response,
+    z.array(sentenceCategorySchema),
+    "Failed to read sentence categories",
+  );
 }
 
 export async function createSentenceCategory(
@@ -63,7 +74,11 @@ export async function createSentenceCategory(
     throw new Error("Failed to create category.");
   }
 
-  return response.json();
+  return parseJsonResponse(
+    response,
+    sentenceCategorySchema,
+    "Failed to read the created category",
+  );
 }
 
 export async function updateSentenceCategory(
@@ -79,7 +94,11 @@ export async function updateSentenceCategory(
     throw new Error("Failed to update category.");
   }
 
-  return response.json();
+  return parseJsonResponse(
+    response,
+    sentenceCategorySchema,
+    "Failed to read the updated category",
+  );
 }
 
 export async function deleteSentenceCategory(
@@ -105,7 +124,11 @@ export async function fetchSentenceTemplates(
     throw new Error("Failed to fetch sentence templates.");
   }
 
-  return response.json();
+  return parseJsonResponse(
+    response,
+    z.array(sentenceTemplateSchema),
+    "Failed to read sentence templates",
+  );
 }
 
 export async function createSentenceTemplate(
@@ -120,7 +143,11 @@ export async function createSentenceTemplate(
     throw new Error("Failed to create practice sentence.");
   }
 
-  return response.json();
+  return parseJsonResponse(
+    response,
+    sentenceTemplateSchema,
+    "Failed to read the created sentence",
+  );
 }
 
 export async function updateSentenceTemplate(
@@ -136,7 +163,11 @@ export async function updateSentenceTemplate(
     throw new Error("Failed to update practice sentence.");
   }
 
-  return response.json();
+  return parseJsonResponse(
+    response,
+    sentenceTemplateSchema,
+    "Failed to read the updated sentence",
+  );
 }
 
 export async function deleteSentenceTemplate(

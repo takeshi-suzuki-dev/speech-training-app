@@ -122,8 +122,8 @@ export function AuthPanel() {
           Already approved for access?
         </h2>
         <p className="text-gray-500 text-sm leading-relaxed mb-3">
-          Sign in with your approved Google account to continue to the
-          practice app.
+          Sign in with your approved Google account to continue to the practice
+          app.
         </p>
         <button
           type="button"

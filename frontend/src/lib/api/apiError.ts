@@ -1,13 +1,15 @@
+import { z } from "zod";
+
 /**
  * The error body the backend sends on a failed request.
  *
  * Both the global exception handler and the auth interceptor produce this shape, so any non-2xx
  * response is expected to carry it.
  */
-type ApiErrorBody = {
-  error?: string;
-  message?: string;
-};
+const apiErrorBodySchema = z.object({
+  error: z.string().optional(),
+  message: z.string().optional(),
+});
 
 /**
  * Reads the message the backend sent, or null if the response carries none.
@@ -19,9 +21,12 @@ export async function readApiErrorMessage(
   response: Response,
 ): Promise<string | null> {
   try {
-    const body: ApiErrorBody = await response.clone().json();
+    const body = apiErrorBodySchema.parse(await response.clone().json());
     const message = body.message?.trim();
-    return message ? message : null;
+
+    // Not `message ?? null`: an empty string is a present-but-useless message,
+    // and the caller needs null to fall back to its own wording.
+    return message === undefined || message === "" ? null : message;
   } catch {
     // A non-JSON body (a proxy error page, an empty response) is not worth
     // failing over: the caller falls back to its own wording.

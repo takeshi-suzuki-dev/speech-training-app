@@ -28,7 +28,7 @@ function formatScore(value: number | null | undefined): string {
 
 function getLatestRank(data: DailyScoreTrendResult[]): number | null {
   const latest = data.at(-1);
-  if (!latest || latest.overallAverage == null) return null;
+  if (latest?.overallAverage == null) return null;
 
   const uniqueScores = Array.from(
     new Set(
@@ -121,7 +121,7 @@ export default function HistoryPage() {
         setIsLoading(false);
       }
     }
-    loadTrendData();
+    void loadTrendData();
   }, []);
 
   useEffect(() => {
@@ -218,7 +218,7 @@ export default function HistoryPage() {
                     {formatScore(raw)}
                   </p>
                 </div>
-                {(rankMessage || isHot) && (
+                {(rankMessage !== null || isHot) && (
                   <div className="flex flex-wrap gap-2">
                     {rankMessage && (
                       <div className="rounded-full border border-purple-100 bg-linear-to-r from-purple-50 to-pink-50 px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm font-semibold text-purple-500">

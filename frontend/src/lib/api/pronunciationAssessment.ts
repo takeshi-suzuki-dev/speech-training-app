@@ -1,6 +1,10 @@
 import { apiFetch } from "@/lib/api/apiFetch";
 import { getAccessDeniedMessage } from "@/lib/api/apiError";
-import { SpeechEvaluateResponse } from "@/types/pronunciation";
+import { parseJsonResponse } from "@/lib/api/parseResponse";
+import {
+  speechEvaluateResponseSchema,
+  type SpeechEvaluateResponse,
+} from "@/types/pronunciation";
 
 export async function scorePronunciation(
   audioFile: File,
@@ -26,7 +30,11 @@ export async function scorePronunciation(
     throw new Error(await getSpeechApiErrorMessage(response));
   }
 
-  return response.json();
+  return parseJsonResponse(
+    response,
+    speechEvaluateResponseSchema,
+    "Failed to read the pronunciation score",
+  );
 }
 
 async function getSpeechApiErrorMessage(response: Response): Promise<string> {

@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/apiFetch";
+import { readApiErrorMessage } from "@/lib/api/apiError";
 
 export type AccessRequestPayload = {
   name: string;
@@ -22,10 +23,10 @@ export async function submitAccessRequest(
   });
 
   if (!response.ok) {
-    const detail = await response.json().catch(() => null);
+    const message = await readApiErrorMessage(response);
 
     throw new Error(
-      detail?.message ?? "Something went wrong. Please try again in a moment.",
+      message ?? "Something went wrong. Please try again in a moment.",
     );
   }
 }

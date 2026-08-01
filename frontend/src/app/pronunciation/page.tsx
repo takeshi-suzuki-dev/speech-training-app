@@ -891,8 +891,7 @@ export default function PronunciationPage() {
               {getRecognitionStatusMessage(result.recognitionStatus)}
             </div>
           )}
-          {result &&
-            result.recognitionStatus === "Success" &&
+          {result?.recognitionStatus === "Success" &&
             isEffectivelyNoSpeech(result) && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 Almost no speech was recognized. Please try recording again.
@@ -900,8 +899,7 @@ export default function PronunciationPage() {
             )}
 
           {/* ── Results ── */}
-          {result &&
-            result.recognitionStatus === "Success" &&
+          {result?.recognitionStatus === "Success" &&
             !isEffectivelyNoSpeech(result) && (
               <div className="flex flex-col gap-4">
                 {/* Score summary */}

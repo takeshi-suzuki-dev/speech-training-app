@@ -1,4 +1,7 @@
+import { z } from "zod";
+
 import { apiFetch } from "@/lib/api/apiFetch";
+import { parseJsonResponse } from "@/lib/api/parseResponse";
 
 export async function fetchFavoriteTemplateIds(): Promise<string[]> {
   const response = await apiFetch("/api/template-favorites", {
@@ -9,7 +12,11 @@ export async function fetchFavoriteTemplateIds(): Promise<string[]> {
     throw new Error("Failed to fetch favorite templates.");
   }
 
-  return response.json();
+  return parseJsonResponse(
+    response,
+    z.array(z.string()),
+    "Failed to read favorite templates",
+  );
 }
 
 export async function addTemplateFavorite(templateId: string): Promise<void> {

@@ -25,7 +25,11 @@ import {
   removeTemplateFavorite,
 } from "@/lib/api/templateFavorites";
 
-export type SidebarView = "categories" | "phrases" | "category-form" | "phrase-form";
+export type SidebarView =
+  | "categories"
+  | "phrases"
+  | "category-form"
+  | "phrase-form";
 
 const buildTemplateLatestScores = (
   attempts: TrainingAttemptResult[],
@@ -204,14 +208,7 @@ export function useCategoryTemplateManager({
   useEffect(() => {
     let ignore = false;
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        if (!ignore) {
-          setFavorites(new Set());
-        }
-        return;
-      }
-
+    const loadFavorites = async () => {
       try {
         const favoriteIds = await fetchFavoriteTemplateIds();
 
@@ -223,6 +220,17 @@ export function useCategoryTemplateManager({
       } catch (error) {
         console.error(error);
       }
+    };
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        if (!ignore) {
+          setFavorites(new Set());
+        }
+        return;
+      }
+
+      void loadFavorites();
     });
 
     return () => {

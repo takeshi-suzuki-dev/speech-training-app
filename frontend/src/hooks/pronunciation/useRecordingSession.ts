@@ -194,10 +194,9 @@ export function useRecordingSession({
         window.clearTimeout(releaseTimerRef.current);
         releaseTimerRef.current = null;
       }
-      if (!recordingStreamRef.current)
-        recordingStreamRef.current = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
+      recordingStreamRef.current ??= await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
       if (
         !audioContextRef.current ||
         audioContextRef.current.state === "closed"
