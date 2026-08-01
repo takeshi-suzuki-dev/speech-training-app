@@ -1,11 +1,15 @@
 package com.takeshi.backend.auth;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
 import com.takeshi.backend.entity.AppAllowedUser;
@@ -23,12 +27,15 @@ public class FirebaseAuthenticationInterceptor implements HandlerInterceptor {
 
     private final FirebaseAuthService firebaseAuthService;
     private final AppAccessService appAccessService;
+    private final ObjectMapper objectMapper;
 
     public FirebaseAuthenticationInterceptor(
             FirebaseAuthService firebaseAuthService,
-            AppAccessService appAccessService) {
+            AppAccessService appAccessService,
+            ObjectMapper objectMapper) {
         this.firebaseAuthService = firebaseAuthService;
         this.appAccessService = appAccessService;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -74,12 +81,15 @@ public class FirebaseAuthenticationInterceptor implements HandlerInterceptor {
             String error,
             String message) throws IOException {
         response.setStatus(status.value());
-        response.setContentType("application/json");
-        response.getWriter().write("""
-                {
-                  "error": "%s",
-                  "message": "%s"
-                }
-                """.formatted(error, message));
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+
+        // Serialized rather than interpolated: a quote or newline in the
+        // message would otherwise produce malformed JSON, and the client
+        // would silently fall back to a generic wording instead of showing
+        // the specific reason access was refused.
+        objectMapper.writeValue(
+                response.getWriter(),
+                Map.of("error", error, "message", message == null ? "" : message));
     }
 }

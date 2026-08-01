@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
@@ -14,11 +15,14 @@ import com.google.firebase.FirebaseOptions;
 import jakarta.annotation.PostConstruct;
 
 @Configuration
+// Skipped in tests: the context test only needs the application to wire up,
+// and Firebase Admin SDK insists on real credentials it cannot get in CI.
+@Profile("!test")
 public class FirebaseConfig {
 
     /**
-     * Raw service account JSON. Injected from Secrets Manager in production.
-     * When blank, falls back to Application Default Credentials
+     * Raw service account JSON. Injected from Secrets Manager in production. When
+     * blank, falls back to Application Default Credentials
      * (GOOGLE_APPLICATION_CREDENTIALS file path) for local development.
      */
     @Value("${firebase.credentials-json:}")

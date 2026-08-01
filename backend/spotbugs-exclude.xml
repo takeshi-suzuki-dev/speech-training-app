@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter
+	xmlns="https://github.com/spotbugs/filter/3.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/master/spotbugs/etc/findbugsfilter.xsd">
+
+	<!--
+		Response DTOs holding collections.
+
+		These records are built once from an upstream API result and serialized
+		straight to JSON; nothing mutates them afterwards. Defensive copies
+		would allocate a second array per word and per phoneme on every scoring
+		request to protect against a caller that does not exist.
+	-->
+	<Match>
+		<Package name="com.takeshi.backend.dto.response" />
+		<Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2" />
+	</Match>
+
+	<!--
+		Constructor-injected Spring beans.
+
+		Storing the reference handed in by the container is what dependency
+		injection is; copying it is neither possible nor meaningful for a
+		singleton. Scoped to EI_EXPOSE_REP2 (storing a reference) on purpose:
+		EI_EXPOSE_REP (returning internal state) stays reported here, because
+		in a service that could be a real leak worth looking at.
+	-->
+	<Match>
+		<Package name="~com\.takeshi\.backend\.(auth|config|controller|service)" />
+		<Bug pattern="EI_EXPOSE_REP2" />
+	</Match>
+
+	<!--
+		Literal \n in a format string.
+
+		SpotBugs prefers %n, which resolves to the platform line separator.
+		This text is the body of a notification email, where \n is the intended
+		and portable choice regardless of the host the task runs on.
+	-->
+	<Match>
+		<Class name="com.takeshi.backend.service.AccessRequestService" />
+		<Bug pattern="VA_FORMAT_STRING_USES_NEWLINE" />
+	</Match>
+</FindBugsFilter>

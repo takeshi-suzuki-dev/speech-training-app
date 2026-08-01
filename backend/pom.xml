@@ -82,6 +82,12 @@
 			<groupId>software.amazon.awssdk</groupId>
 			<artifactId>sns</artifactId>
 		</dependency>
+		
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -100,5 +106,39 @@
 			</plugin>
 		</plugins>
 	</build>
+	
+	<!--
+		Optional quality gate. Not part of the normal build: enable with
+		`mvn -Pquality spotbugs:spotbugs` to produce a report. Kept out of the
+		default lifecycle so `mvn test` and `mvn package` stay fast and are not
+		blocked by findings that need human judgement.
+	-->
+	<profiles>
+		<profile>
+			<id>quality</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>com.github.spotbugs</groupId>
+						<artifactId>spotbugs-maven-plugin</artifactId>
+						<version>4.9.6.0</version>
+						<configuration>
+							<effort>Max</effort>
+							<threshold>Medium</threshold>
+							<includeTests>false</includeTests>
+							<excludeFilterFile>spotbugs-exclude.xml</excludeFilterFile>
+							<plugins>
+								<plugin>
+									<groupId>com.h3xstream.findsecbugs</groupId>
+									<artifactId>findsecbugs-plugin</artifactId>
+									<version>1.14.0</version>
+								</plugin>
+							</plugins>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 </project>
