@@ -3,7 +3,8 @@ package com.takeshi.backend.auth;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
-import com.takeshi.backend.exception.AppAccessDeniedException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -24,7 +25,8 @@ public final class UserIdentity {
                 FirebaseAuthenticationInterceptor.FIREBASE_UID_ATTRIBUTE);
 
         if (uid == null || uid.toString().isBlank()) {
-            throw new AppAccessDeniedException("Authenticated user is required.");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                    "Authenticated user is required.");
         }
 
         return fromFirebaseUid(uid.toString());

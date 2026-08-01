@@ -35,6 +35,13 @@ public class CorsConfig {
                         .allowedOrigins(allowedOrigins)
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowedHeaders("*");
+
+                // The public access-request endpoint is cross-origin during local
+                // development (localhost:3000 calling localhost:8080).
+                registry.addMapping("/public/**")
+                        .allowedOrigins(allowedOrigins)
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                        .allowedHeaders("*");
             }
 
             @Override
