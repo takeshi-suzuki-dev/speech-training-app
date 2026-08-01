@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+
+import { API_BASE_URL } from "@/lib/config";
 import { AuthPanel } from "@/components/AuthPanel";
 
 // ── Static content ───────────────────────────────────────────
@@ -25,7 +27,6 @@ const FEATURES = [
   },
 ];
 
-const TRIAL_EMAIL = "your-address@example.com"; // TODO: replace with real contact address
 
 // Official logos via Simple Icons CDN (https://simpleicons.org).
 // Note: Azure has no official icon in Simple Icons (and Microsoft's brand
@@ -409,20 +410,45 @@ export default function Home() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [website, setWebsite] = useState(""); // honeypot; real users never see this
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitting(true);
+    setError(null);
 
-    const subject = encodeURIComponent(
-      "Trial access request — Pronunciation app",
-    );
-    const body = encodeURIComponent(
-      `Name: ${name}\nEmail: ${email}\n\n${message}`,
-    );
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/public/access-requests`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, email, message, website }),
+        },
+      );
 
-    window.location.href = `mailto:${TRIAL_EMAIL}?subject=${subject}&body=${body}`;
-    setSubmitted(true);
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+
+        throw new Error(
+          detail?.message ??
+            "Something went wrong. Please try again in a moment.",
+        );
+      }
+
+      setSubmitted(true);
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Something went wrong. Please try again in a moment.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -520,8 +546,11 @@ export default function Home() {
             <div className="flex flex-col items-center justify-center text-center gap-2 bg-emerald-50 rounded-xl p-6">
               <span className="text-3xl">✅</span>
               <p className="text-sm font-bold text-emerald-700">
-                Your email app should have opened — send it to complete the
-                request.
+                Request received. I&apos;ll get back to you within 2&ndash;3 days.
+              </p>
+              <p className="text-xs text-emerald-600">
+                Access will be granted to the Google account at the address you
+                provided.
               </p>
             </div>
           ) : (
@@ -564,11 +593,30 @@ export default function Home() {
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition resize-none"
                 />
               </div>
+              {/* Honeypot: hidden from users, filled in by bots */}
+              <input
+                type="text"
+                name="website"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                className="hidden"
+              />
+
+              {error && (
+                <p className="text-sm text-red-600" role="alert">
+                  {error}
+                </p>
+              )}
+
               <button
                 type="submit"
-                className="rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-sm font-bold py-3 transition"
+                disabled={submitting}
+                className="rounded-xl bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 disabled:cursor-not-allowed text-white text-sm font-bold py-3 transition"
               >
-                Send trial request
+                {submitting ? "Sending…" : "Send trial request"}
               </button>
             </form>
           )}
