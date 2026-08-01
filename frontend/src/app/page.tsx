@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 
-import { API_BASE_URL } from "@/lib/config";
+import {
+  submitAccessRequest,
+  type AccessRequestPayload,
+} from "@/lib/api/accessRequests";
 import { AuthPanel } from "@/components/AuthPanel";
 
 // ── Static content ───────────────────────────────────────────
@@ -421,23 +424,14 @@ export default function Home() {
     setError(null);
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/public/access-requests`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, email, message, website }),
-        },
-      );
+      const payload: AccessRequestPayload = {
+        name,
+        email,
+        message,
+        website,
+      };
 
-      if (!response.ok) {
-        const detail = await response.json().catch(() => null);
-
-        throw new Error(
-          detail?.message ??
-            "Something went wrong. Please try again in a moment.",
-        );
-      }
+      await submitAccessRequest(payload);
 
       setSubmitted(true);
     } catch (submitError) {
