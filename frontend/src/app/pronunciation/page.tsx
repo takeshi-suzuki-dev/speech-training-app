@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AppNav from "@/components/AppNav";
 import { SentenceTemplate } from "@/lib/api/sentenceTemplates";
 import { SpeechEvaluateResponse } from "@/types/pronunciation";
@@ -8,6 +8,7 @@ import { useCategoryTemplateManager } from "@/hooks/pronunciation/useCategoryTem
 import { useRecordingSession } from "@/hooks/pronunciation/useRecordingSession";
 import { useSampleAudioPlayer } from "@/hooks/pronunciation/useSampleAudioPlayer";
 import { useScoring } from "@/hooks/pronunciation/useScoring";
+import { useSheetDrag } from "@/hooks/pronunciation/useSheetDrag";
 import { TemplateCard } from "@/components/pronunciation/TemplateCard";
 import { CategoryCard } from "@/components/pronunciation/CategoryCard";
 import { getCategoryIcon } from "@/lib/pronunciation/categoryIcon";
@@ -100,6 +101,9 @@ export default function PronunciationPage() {
 
   // ── UI state ──────────────────────────────────────────────
   const [sheetOpen, setSheetOpen] = useState(false);
+
+  const closeSheet = useCallback(() => setSheetOpen(false), []);
+  const sheetDrag = useSheetDrag(closeSheet);
 
   // ── Refs ──────────────────────────────────────────────────
   const myVoiceRef = useRef<HTMLAudioElement>(null);
@@ -1065,8 +1069,23 @@ export default function PronunciationPage() {
             if (e.target === e.currentTarget) setSheetOpen(false);
           }}
         >
-          <div className="w-full bg-white rounded-t-3xl max-h-[80vh] overflow-y-auto">
-            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-4" />
+          {/*
+            overscroll-contain stops a drag inside the scrollable body from
+            chaining to the document, where the browser would read it as
+            pull-to-refresh and reload the page mid-edit.
+          */}
+          <div
+            className="w-full bg-white rounded-t-3xl max-h-[80vh] overflow-y-auto overscroll-contain"
+            style={sheetDrag.panelStyle}
+          >
+            {/* Drag down to dismiss; tapping the backdrop also closes. */}
+            <div
+              aria-hidden="true"
+              className="w-full flex justify-center pt-3 pb-4 cursor-grab active:cursor-grabbing"
+              {...sheetDrag.handleProps}
+            >
+              <span className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
 
             {/* ── Sheet: phrases view ── */}
             {catTpl.sheetView === "phrases" && (
@@ -1100,12 +1119,6 @@ export default function PronunciationPage() {
                       }`}
                     >
                       {catTpl.favoritesOnly ? "★" : "☆"} Fav
-                    </button>
-                    <button
-                      onClick={() => setSheetOpen(false)}
-                      className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 text-sm"
-                    >
-                      ✕
                     </button>
                   </div>
                 </div>
@@ -1157,12 +1170,6 @@ export default function PronunciationPage() {
                       className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold border border-purple-200 bg-purple-50 text-purple-500 transition"
                     >
                       + New
-                    </button>
-                    <button
-                      onClick={() => setSheetOpen(false)}
-                      className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 text-sm"
-                    >
-                      ✕
                     </button>
                   </div>
                 </div>
