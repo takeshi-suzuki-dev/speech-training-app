@@ -7,7 +7,12 @@ public class SentenceScores {
     private Integer fluency;
     private Integer completeness;
     private Integer prosody;
-    private Integer pron;
+    /**
+     * Azure calls this PronScore. It is the overall pronunciation score rather
+     * than a fifth dimension alongside the four above, so it is exposed under a
+     * name that says what it means and matches training_attempts.overall_score.
+     */
+    private Integer overallScore;
     private Map<String, Object> additionalScores;
 
     public Integer getAccuracy() {
@@ -42,12 +47,12 @@ public class SentenceScores {
         this.prosody = prosody;
     }
 
-    public Integer getPron() {
-        return pron;
+    public Integer getOverallScore() {
+        return overallScore;
     }
 
-    public void setPron(Integer pron) {
-        this.pron = pron;
+    public void setOverallScore(Integer overallScore) {
+        this.overallScore = overallScore;
     }
 
     public Map<String, Object> getAdditionalScores() {

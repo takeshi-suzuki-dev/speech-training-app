@@ -57,9 +57,9 @@ public class PronunciationController {
 
         if (!shouldSaveTrainingAttempt(result)) {
             logger.info(
-                    "Skip saving training attempt. recognitionStatus={}, pronScore={}",
+                    "Skip saving training attempt. recognitionStatus={}, overallScore={}",
                     result.getRecognitionStatus(),
-                    scores != null ? scores.getPron() : null);
+                    scores != null ? scores.getOverallScore() : null);
 
             return ResponseEntity.ok(result);
         }
@@ -72,7 +72,7 @@ public class PronunciationController {
                             sentenceId,
                             referenceText,
                             result.getTranscript(),
-                            scores != null ? toBigDecimal(scores.getPron()) : null,
+                            scores != null ? toBigDecimal(scores.getOverallScore()) : null,
                             scores != null ? toBigDecimal(scores.getAccuracy()) : null,
                             scores != null ? toBigDecimal(scores.getFluency()) : null,
                             scores != null ? toBigDecimal(scores.getCompleteness()) : null,
@@ -97,11 +97,11 @@ public class PronunciationController {
 
         SentenceScores scores = result.getSentenceScores();
 
-        if (scores == null || scores.getPron() == null) {
+        if (scores == null || scores.getOverallScore() == null) {
             return false;
         }
 
-        return scores.getPron() > 0;
+        return scores.getOverallScore() > 0;
     }
 
     private BigDecimal toBigDecimal(Number value) {

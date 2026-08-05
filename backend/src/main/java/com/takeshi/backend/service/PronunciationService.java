@@ -123,7 +123,6 @@ public class PronunciationService {
 
         var response = new SpeechEvaluateResponse();
         response.setRawJson(objectMapper.convertValue(root, Object.class));
-        System.out.println(responseBody);
 
         response.setRecognitionStatus(root.path("RecognitionStatus").asText(null));
 
@@ -154,7 +153,7 @@ public class PronunciationService {
         sentenceScores.setFluency((int) Math.round(nbest0.path(FLUENCY_SCORE).asDouble(0)));
         sentenceScores.setCompleteness((int) Math.round(nbest0.path(COMPLETENESS_SCORE).asDouble(0)));
         sentenceScores.setProsody((int) Math.round(nbest0.path(PROSODY_SCORE).asDouble(0)));
-        sentenceScores.setPron((int) Math.round(nbest0.path(PRON_SCORE).asDouble(0)));
+        sentenceScores.setOverallScore((int) Math.round(nbest0.path(PRON_SCORE).asDouble(0)));
         return sentenceScores;
     }
 
