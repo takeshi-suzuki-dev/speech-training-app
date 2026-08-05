@@ -26,7 +26,7 @@ const wordChipClass = (score: number) => {
   return "bg-red-50 text-red-600 border-red-200";
 };
 
-function getRecognitionStatusMessage(status?: string): string | null {
+function getRecognitionStatusMessage(status?: string | null): string | null {
   switch (status) {
     case "Success":
       return null;
@@ -39,7 +39,9 @@ function getRecognitionStatusMessage(status?: string): string | null {
     case "Error":
       return "An error occurred in Azure Speech. Please try again later.";
     default:
-      return status ? `Unexpected recognition result: ${status}` : null;
+      return status != null && status !== ""
+        ? `Unexpected recognition result: ${status}`
+        : null;
   }
 }
 
@@ -50,7 +52,7 @@ function isEffectivelyNoSpeech(result: SpeechEvaluateResponse): boolean {
   return (
     result.recognitionStatus === "Success" &&
     result.transcript?.trim() === "." &&
-    result.sentenceScores?.pron === 0 &&
+    result.sentenceScores?.overallScore === 0 &&
     allOmitted
   );
 }
@@ -908,9 +910,9 @@ export default function PronunciationPage() {
                   <div className="flex items-center gap-4 mb-5 flex-wrap">
                     <div>
                       <span
-                        className={`text-5xl font-black font-mono leading-none ${scoreTextColor(sentenceScores?.pron ?? 0)}`}
+                        className={`text-5xl font-black font-mono leading-none ${scoreTextColor(sentenceScores?.overallScore ?? 0)}`}
                       >
-                        {sentenceScores?.pron}
+                        {sentenceScores?.overallScore}
                       </span>
                       <span className="text-sm text-gray-300 ml-1">/100</span>
                     </div>
