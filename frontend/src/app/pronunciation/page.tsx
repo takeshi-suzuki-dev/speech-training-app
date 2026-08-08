@@ -369,7 +369,7 @@ export default function PronunciationPage() {
                           onClick={() =>
                             catTpl.setTemplateFormCategoryId(cat.id)
                           }
-                          className={`rounded-xl border-2 px-3 py-2 text-left text-sm font-bold transition ${
+                          className={`rounded-lg border-2 px-2 py-1.5 text-left text-xs font-bold leading-snug transition ${
                             catTpl.templateFormCategoryId === cat.id
                               ? "border-purple-300 bg-purple-50 text-purple-700"
                               : "border-gray-100 bg-gray-50 text-gray-500 hover:border-purple-200"
@@ -408,8 +408,8 @@ export default function PronunciationPage() {
                         catTpl.setTemplateFormText(e.target.value)
                       }
                       placeholder="e.g. I've always wanted to..."
-                      rows={3}
-                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition resize-none"
+                      rows={10}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition resize-y min-h-40"
                     />
                   </div>
 
@@ -591,6 +591,13 @@ export default function PronunciationPage() {
           {/* ── Phrase panel ── */}
           <Card>
             <SectionLabel>Practice Phrase</SectionLabel>
+            {/* The sidebar clamps long phrases, so the title is what identifies
+                the selection there; repeat it here in full to confirm it. */}
+            {selectedTemplate?.title && (
+              <p className="text-sm font-bold text-purple-400 mb-2 break-words">
+                {selectedTemplate.title}
+              </p>
+            )}
             <p
               className={`text-xl font-bold leading-snug mb-4 ${
                 hasSelectedTemplate ? "text-gray-800" : "text-gray-400"

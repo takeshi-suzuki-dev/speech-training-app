@@ -24,6 +24,9 @@ const VARIANT_STYLES: Record<
   {
     container: (isSelected: boolean) => string;
     selectButton: string;
+    /** Reserves room for the star and edit buttons, which sit on this row only. */
+    badgeRow: string;
+    titleText: string;
     phraseText: string;
     scoreRow: string;
     star: string;
@@ -37,8 +40,11 @@ const VARIANT_STYLES: Record<
           ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50 shadow-sm"
           : "border-gray-100 bg-gray-50 hover:bg-purple-50 hover:border-purple-200"
       }`,
-    selectButton: "w-full text-left px-3 py-3 pr-14",
-    phraseText: "text-[13px] font-semibold text-gray-700 leading-snug",
+    selectButton: "w-full text-left px-3 py-3",
+    badgeRow: "pr-14",
+    titleText: "text-sm font-bold text-purple-400 break-words",
+    phraseText:
+      "text-sm font-semibold text-gray-700 leading-snug line-clamp-2 mr-2",
     scoreRow: "flex items-center gap-1.5 mt-1.5",
     star: "absolute top-2.5 right-8 text-sm transition hover:scale-125",
     edit: "absolute top-2 right-1 w-6 h-6 flex items-center justify-center rounded-lg text-gray-600 hover:text-purple-600 hover:bg-purple-100 focus-visible:text-purple-600 focus-visible:bg-purple-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-300 transition text-xs",
@@ -50,7 +56,9 @@ const VARIANT_STYLES: Record<
           ? "border-purple-300 bg-linear-to-br from-purple-50 to-blue-50"
           : "border-gray-100 bg-gray-50"
       }`,
-    selectButton: "w-full px-4 py-3.5 text-left pr-20",
+    selectButton: "w-full px-4 py-3.5 text-left",
+    badgeRow: "pr-20",
+    titleText: "text-xs font-bold text-purple-400 truncate",
     phraseText: "text-sm font-semibold text-gray-700 leading-snug mb-2",
     scoreRow: "flex items-center gap-1.5",
     star: "absolute top-3 right-10 text-sm transition hover:scale-125",
@@ -105,23 +113,17 @@ export function TemplateCard({
 
   return (
     <div className={styles.container(isSelected)}>
-      <button
-        type="button"
-        onClick={onSelect}
-        className={styles.selectButton}
-      >
-        <div className="flex items-center gap-2 mb-1.5">
+      <button type="button" onClick={onSelect} className={styles.selectButton}>
+        <div className={`flex items-center gap-2 mb-1.5 ${styles.badgeRow}`}>
           <span
             className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${diffBadge}`}
           >
             {diffLabel}
           </span>
-          {template.title && (
-            <span className="text-[10px] font-bold text-purple-400 truncate">
-              {template.title}
-            </span>
-          )}
         </div>
+        {template.title && (
+          <p className={`${styles.titleText} mb-1`}>{template.title}</p>
+        )}
         <p className={styles.phraseText}>{template.displayText}</p>
         <div className={styles.scoreRow}>
           <span
@@ -132,7 +134,9 @@ export function TemplateCard({
               Not tried yet
             </span>
           ) : (
-            <span className={`text-[11px] font-bold ${scoreTextClass(lastScore)}`}>
+            <span
+              className={`text-[11px] font-bold ${scoreTextClass(lastScore)}`}
+            >
               Last: {lastScore}
             </span>
           )}
@@ -142,9 +146,7 @@ export function TemplateCard({
         type="button"
         onClick={onToggleFavorite}
         className={`${styles.star} ${
-          isFavorite
-            ? "text-amber-400"
-            : "text-gray-600 hover:text-amber-400"
+          isFavorite ? "text-amber-400" : "text-gray-600 hover:text-amber-400"
         }`}
       >
         {isFavorite ? "★" : "☆"}
