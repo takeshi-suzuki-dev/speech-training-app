@@ -1,9 +1,7 @@
 {
   "family": "cadence-backend",
   "networkMode": "awsvpc",
-  "requiresCompatibilities": [
-    "FARGATE"
-  ],
+  "requiresCompatibilities": ["FARGATE"],
   "cpu": "512",
   "memory": "1024",
   "runtimePlatform": {
@@ -68,6 +66,10 @@
         {
           "name": "ACCESS_REQUEST_TOPIC_ARN",
           "value": "arn:aws:sns:ap-northeast-1:459100131283:cadence-access-requests"
+        },
+        {
+          "name": "ALERT_TOPIC_ARN",
+          "value": "arn:aws:sns:ap-northeast-1:459100131283:cadence-alerts"
         }
       ]
     }
