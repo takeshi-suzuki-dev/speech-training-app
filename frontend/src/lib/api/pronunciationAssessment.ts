@@ -1,5 +1,8 @@
 import { apiFetch } from "@/lib/api/apiFetch";
-import { getAccessDeniedMessage } from "@/lib/api/apiError";
+import {
+  getAccessDeniedMessage,
+  readApiErrorMessage,
+} from "@/lib/api/apiError";
 import { parseJsonResponse } from "@/lib/api/parseResponse";
 import {
   speechEvaluateResponseSchema,
@@ -52,12 +55,21 @@ async function getSpeechApiErrorMessage(response: Response): Promise<string> {
     return getAccessDeniedMessage(response);
   }
 
+  // 429 and 5xx both cover several distinct upstream failures. The backend
+  // decides what to say; these fallbacks only cover a response that carried no
+  // message, and match its wording so neither leaks which vendor failed.
   if (status === 429) {
-    return "Speech service quota or rate limit was reached. Please try again later.";
+    return (
+      (await readApiErrorMessage(response)) ??
+      "This feature is temporarily unavailable. Please try again later."
+    );
   }
 
   if (status >= 500) {
-    return "Speech service error. Please try again later.";
+    return (
+      (await readApiErrorMessage(response)) ??
+      "Something went wrong. Please contact the developer if this keeps happening."
+    );
   }
 
   return "Failed to evaluate pronunciation. Please try again.";
