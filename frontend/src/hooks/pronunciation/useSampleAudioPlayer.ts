@@ -77,12 +77,6 @@ export type SampleAudioPlayer = {
   /** Spread onto the hidden <audio> element. */
   audioProps: SampleAudioElementProps;
   /**
-   * Silently generate/cache a template's sample audio and set it as the source
-   * without auto-playing. Manages the loading flag; resolves to false on
-   * failure. Stable identity — safe as an effect dependency.
-   */
-  preload: (template: SentenceTemplate) => Promise<boolean>;
-  /**
    * Toggle play/pause when audio already exists, otherwise generate then
    * auto-play. `referenceText` gates generation the same way the page does.
    */
@@ -177,32 +171,6 @@ export function useSampleAudioPlayer({
     [],
   );
 
-  // Silently prepare (generate/cache) a template's sample audio and set it as
-  // the current source *without* auto-playing. Owns the loading flag; the page
-  // decides *when* to call this (on template change). Returns false on failure
-  // so the caller can skip stale-guarded state updates.
-  const preload = useCallback(
-    async (template: SentenceTemplate): Promise<boolean> => {
-      try {
-        setTtsLoading(true);
-        const objectUrl = await getOrCreateUrl(template);
-        pendingSampleAudioAutoPlayRef.current = false;
-        setAudioUrl(objectUrl);
-        return true;
-      } catch (error) {
-        reportErrorRef.current(
-          error instanceof Error
-            ? error.message
-            : "Failed to prepare sample audio.",
-        );
-        return false;
-      } finally {
-        setTtsLoading(false);
-      }
-    },
-    [getOrCreateUrl],
-  );
-
   const removeCachedForTemplate = useCallback((templateId: string) => {
     removeCachedSampleAudioForTemplate(sampleAudioCacheRef.current, templateId);
   }, []);
@@ -255,8 +223,8 @@ export function useSampleAudioPlayer({
     void audio.play();
   }, []);
 
-  // Load the new source; auto-play only when the pending flag was set (i.e. the
-  // user pressed play, not the silent preload path).
+  // Load the new source; auto-play only when the pending flag was set, so that
+  // restoring a cached URL does not start playback on its own.
   useEffect(() => {
     if (!audioUrl || !audioRef.current) {
       return;
@@ -306,7 +274,6 @@ export function useSampleAudioPlayer({
     currentTime,
     duration,
     audioProps,
-    preload,
     playSample,
     seek,
     resetState,

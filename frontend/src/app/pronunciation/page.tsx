@@ -108,12 +108,12 @@ export default function PronunciationPage() {
   // ── Refs ──────────────────────────────────────────────────
   const myVoiceRef = useRef<HTMLAudioElement>(null);
 
-  // Sample-audio player (TTS / Roger). Passive: the page decides *when* to
-  // preload (effect below); the hook owns generation, caching and playback.
+  // Sample-audio player (TTS / Roger). Generation is deferred until the person
+  // presses play: selecting a phrase must not spend text-to-speech quota on
+  // audio nobody asked to hear.
   const player = useSampleAudioPlayer({
     reportError: setErrorMessage,
   });
-  const { preload: preloadSampleAudio } = player;
 
   const catTpl = useCategoryTemplateManager({
     resetSampleAudioState: player.resetState,
@@ -199,15 +199,6 @@ export default function PronunciationPage() {
     resetScoring();
     resetRecording();
   }, [catTpl.selectedTemplateId, resetScoring, resetRecording]);
-
-  // Preload the sample audio whenever the selected template changes. The page
-  // owns the *timing* (this effect); the hook owns generation/caching/loading.
-  useEffect(() => {
-    if (!selectedTemplate) {
-      return;
-    }
-    void preloadSampleAudio(selectedTemplate);
-  }, [selectedTemplate, preloadSampleAudio]);
 
   // ── Time formatter ────────────────────────────────────────
   const formatTime = (sec: number) => {
@@ -369,7 +360,7 @@ export default function PronunciationPage() {
                           onClick={() =>
                             catTpl.setTemplateFormCategoryId(cat.id)
                           }
-                          className={`rounded-lg border-2 px-2 py-1.5 text-left text-xs font-bold leading-snug transition ${
+                          className={`rounded-xl border-2 px-3 py-2 text-left text-sm font-bold transition ${
                             catTpl.templateFormCategoryId === cat.id
                               ? "border-purple-300 bg-purple-50 text-purple-700"
                               : "border-gray-100 bg-gray-50 text-gray-500 hover:border-purple-200"
@@ -408,8 +399,8 @@ export default function PronunciationPage() {
                         catTpl.setTemplateFormText(e.target.value)
                       }
                       placeholder="e.g. I've always wanted to..."
-                      rows={10}
-                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition resize-y min-h-40"
+                      rows={3}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-purple-300 focus:bg-white transition resize-none"
                     />
                   </div>
 
@@ -591,13 +582,6 @@ export default function PronunciationPage() {
           {/* ── Phrase panel ── */}
           <Card>
             <SectionLabel>Practice Phrase</SectionLabel>
-            {/* The sidebar clamps long phrases, so the title is what identifies
-                the selection there; repeat it here in full to confirm it. */}
-            {selectedTemplate?.title && (
-              <p className="text-sm font-bold text-purple-400 mb-2 break-words">
-                {selectedTemplate.title}
-              </p>
-            )}
             <p
               className={`text-xl font-bold leading-snug mb-4 ${
                 hasSelectedTemplate ? "text-gray-800" : "text-gray-400"
