@@ -11,6 +11,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -26,6 +28,8 @@ import com.takeshi.backend.exception.AzureSpeechApiException;
 
 @Service
 public class PronunciationService {
+
+    private static final Logger logger = LoggerFactory.getLogger(PronunciationService.class);
 
     private static final String N_BEST = "NBest";
     private static final String WORDS = "Words";
@@ -89,8 +93,14 @@ public class PronunciationService {
 
             var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new AzureSpeechApiException(response.statusCode(),
-                        "Azure Speech API error: " + response.statusCode());
+                // Logged here rather than only rethrown: the body names the
+                // actual cause, which the status code on its own does not.
+                logger.warn(
+                        "Azure Speech request failed. status={}, body={}",
+                        response.statusCode(),
+                        response.body());
+
+                throw new AzureSpeechApiException(response.statusCode(), response.body());
             }
 
             return mapAzureResponse(response.body());

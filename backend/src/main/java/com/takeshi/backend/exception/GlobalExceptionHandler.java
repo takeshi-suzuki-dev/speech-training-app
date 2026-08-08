@@ -4,37 +4,53 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+
+import com.takeshi.backend.service.UpstreamAlertService;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    @ExceptionHandler(AzureSpeechApiException.class)
-    public ResponseEntity<Map<String, Object>> handleAzureSpeechApiException(AzureSpeechApiException e) {
-        return ResponseEntity.status(e.getStatusCode()).body(
-                Map.of(
-                        "error",
-                        "AZURE_SPEECH_API_ERROR",
-                        "message",
-                        e.getMessage(),
-                        "statusCode",
-                        e.getStatusCode()));
+    private final UpstreamAlertService upstreamAlertService;
+
+    public GlobalExceptionHandler(UpstreamAlertService upstreamAlertService) {
+        this.upstreamAlertService = upstreamAlertService;
     }
 
-    @ExceptionHandler(ElevenLabsApiException.class)
-    public ResponseEntity<Map<String, Object>> handleElevenLabsApiException(ElevenLabsApiException e) {
-        return ResponseEntity.status(e.getStatusCode()).body(
+    /**
+     * One handler for every third-party dependency: the client is told the same
+     * two things regardless of which vendor failed — whether capacity ran out,
+     * and that the fault is not theirs.
+     */
+    @ExceptionHandler(UpstreamApiException.class)
+    public ResponseEntity<Map<String, Object>> handleUpstreamApiException(UpstreamApiException e) {
+        HttpStatus status = e.isThrottledOrOutOfQuota()
+                ? HttpStatus.TOO_MANY_REQUESTS
+                : HttpStatus.BAD_GATEWAY;
+
+        logger.warn(
+                "Upstream call failed. error={}, upstreamStatus={}, respondingWith={}",
+                e.getErrorCode(),
+                e.getStatusCode(),
+                status.value());
+
+        upstreamAlertService.alert(e);
+
+        return ResponseEntity.status(status).body(
                 Map.of(
                         "error",
-                        "ELEVENLABS_API_ERROR",
+                        e.getErrorCode(),
                         "message",
-                        e.getMessage(),
+                        e.getUserMessage(),
                         "statusCode",
+                        status.value(),
+                        "upstreamStatusCode",
                         e.getStatusCode()));
     }
 

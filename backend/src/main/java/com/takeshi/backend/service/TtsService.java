@@ -2,6 +2,8 @@ package com.takeshi.backend.service;
 
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -29,6 +31,8 @@ public class TtsService {
     private String apiKey;
     @Value("${elevenlabs.voice-id}")
     private String voiceId;
+
+    private static final Logger logger = LoggerFactory.getLogger(TtsService.class);
 
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -58,7 +62,16 @@ public class TtsService {
 
             return response.getBody();
         } catch (HttpStatusCodeException e) {
-            throw new ElevenLabsApiException(e.getStatusCode().value());
+            String responseBody = e.getResponseBodyAsString();
+
+            // Logged here rather than only rethrown: the body names the actual
+            // cause, and without it a 401 is indistinguishable from a bad key.
+            logger.warn(
+                    "ElevenLabs request failed. status={}, body={}",
+                    e.getStatusCode().value(),
+                    responseBody);
+
+            throw new ElevenLabsApiException(e.getStatusCode().value(), responseBody);
         }
     }
 }

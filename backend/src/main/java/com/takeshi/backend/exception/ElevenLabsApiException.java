@@ -1,14 +1,14 @@
 package com.takeshi.backend.exception;
 
-public class ElevenLabsApiException extends RuntimeException {
-    private final int statusCode;
+/** A failed call to the ElevenLabs text-to-speech API. */
+public class ElevenLabsApiException extends UpstreamApiException {
 
-    public ElevenLabsApiException(int statusCode) {
-        super("ElevenLabs API error: " + statusCode);
-        this.statusCode = statusCode;
+    public ElevenLabsApiException(int statusCode, String responseBody) {
+        super("ElevenLabs", statusCode, responseBody);
     }
 
-    public int getStatusCode() {
-        return statusCode;
+    @Override
+    public String getErrorCode() {
+        return isThrottledOrOutOfQuota() ? "TTS_QUOTA_EXCEEDED" : "TTS_UNAVAILABLE";
     }
 }
