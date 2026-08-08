@@ -10,6 +10,9 @@ Public URL: https://d22r3g893vf4i5.cloudfront.net
 Run from the `backend/` directory.
 
 ```bash
+# 0. Start Docker Desktop if it is not already running
+docker info > /dev/null 2>&1 || open -a Docker
+
 # 1. Build (amd64 is required for Fargate)
 docker build --platform=linux/amd64 -t cadence-backend:local .
 
@@ -27,12 +30,14 @@ docker push 459100131283.dkr.ecr.ap-northeast-1.amazonaws.com/cadence-backend:la
 aws ecs update-service \
   --cluster cadence-cluster \
   --service cadence-backend-svc \
+  --task-definition cadence-backend --desired-count 1 \
   --force-new-deployment \
   --region ap-northeast-1 \
   --query 'service.{Name:serviceName,TaskDef:taskDefinition}' --output table
 ```
 
-Only when the task definition itself changed (env vars, cpu/memory, secrets):
+Only when the task definition itself changed (env vars, cpu/memory, secrets).
+Run these from the repository root:
 
 ```bash
 aws ecs register-task-definition \
@@ -55,6 +60,8 @@ Run from the `frontend/` directory.
 `NEXT_PUBLIC_API_BASE_URL` stays empty so the bundle uses relative URLs.
 
 ```bash
+docker info > /dev/null 2>&1 || open -a Docker
+
 docker build --platform=linux/amd64 \
   $(grep '^NEXT_PUBLIC' .env.local | grep -v API_BASE_URL | sed 's/^/--build-arg /' | tr '\n' ' ') \
   --build-arg NEXT_PUBLIC_API_BASE_URL= \
@@ -75,6 +82,24 @@ aws ecs update-service \
 # Clear cached HTML if the old page keeps showing
 aws cloudfront create-invalidation \
   --distribution-id E2X7DMO9FGPFKC --paths "/*"
+```
+
+Only when the task definition itself changed (env vars, cpu/memory, secrets).
+Run these from the repository root:
+
+```bash
+bash
+aws ecs register-task-definition \
+  --cli-input-json file://infra/cadence-frontend-taskdef.json \
+  --region ap-northeast-1 \
+  --query 'taskDefinition.{Family:family,Rev:revision}' --output table
+
+aws ecs update-service \
+  --cluster cadence-cluster --service cadence-frontend-svc \
+  --task-definition cadence-frontend \
+  --desired-count 1 --force-new-deployment \
+  --region ap-northeast-1
+
 ```
 
 ---
