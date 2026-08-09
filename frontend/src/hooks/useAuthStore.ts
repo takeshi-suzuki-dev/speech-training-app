@@ -4,6 +4,16 @@ import { auth } from "@/lib/firebase";
 
 type AuthState = {
   user: User | null;
+  /**
+   * False until Firebase's first onAuthStateChanged callback fires.
+   *
+   * Firebase resolves the initial auth state asynchronously, so `user` starts
+   * as `null` regardless of whether someone is actually signed in. Anything
+   * that redirects on "no user" (see hooks/useRequireAuth.ts) must wait for
+   * this to become true first, or it will bounce an already-signed-in person
+   * for a brief moment on every page load.
+   */
+  isAuthInitialized: boolean;
 };
 
 /**
@@ -21,10 +31,11 @@ type AuthState = {
  */
 export const useAuthStore = create<AuthState>((set) => {
   onAuthStateChanged(auth, (user) => {
-    set({ user });
+    set({ user, isAuthInitialized: true });
   });
 
   return {
     user: null,
+    isAuthInitialized: false,
   };
 });

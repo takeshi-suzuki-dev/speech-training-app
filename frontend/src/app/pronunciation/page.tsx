@@ -12,6 +12,8 @@ import { useSheetDrag } from "@/hooks/pronunciation/useSheetDrag";
 import { TemplateCard } from "@/components/pronunciation/TemplateCard";
 import { CategoryCard } from "@/components/pronunciation/CategoryCard";
 import { getCategoryIcon } from "@/lib/pronunciation/categoryIcon";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
+import { Spinner } from "@/components/Spinner";
 
 // ── Static data ──────────────────────────────────────────────
 // ── Helpers ──────────────────────────────────────────────────
@@ -92,6 +94,8 @@ function Card({
 
 // ═════════════════════════════════════════════════════════════
 export default function PronunciationPage() {
+  const { user, isAuthInitialized } = useRequireAuth();
+
   // ── Shared error banner (fed by every hook + local validation) ─
   const [errorMessage, setErrorMessage] = useState("");
   // ── Audio player state (my voice) ────────────────────────
@@ -210,6 +214,22 @@ export default function PronunciationPage() {
   // ═══════════════════════════════════════════════════════════
   // ── Render ─────────────────────────────────────────────────
   // ═══════════════════════════════════════════════════════════
+
+  // ── Not signed in yet, or loading initial data ──────────────
+  // Combined into one branch (rather than separate early returns) so
+  // AppNav isn't unmounted and remounted between "checking auth" and
+  // "fetching categories" — see the same fix in app/history/page.tsx.
+  if (!isAuthInitialized || !user || catTpl.categoryLoading) {
+    return (
+      <div className="min-h-dvh bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
+        <AppNav />
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Spinner className="w-6 h-6 text-purple-400" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-dvh bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
       {/* ── Nav ── */}
@@ -234,26 +254,20 @@ export default function PronunciationPage() {
                     + New
                   </button>
                 </div>
-                {catTpl.categoryLoading ? (
-                  <p className="text-xs text-gray-400 py-4 text-center">
-                    Loading…
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-1.5">
-                    {catTpl.categories.map((cat) => (
-                      <CategoryCard
-                        key={cat.id}
-                        category={cat}
-                        variant="sidebar"
-                        onSelect={() => {
-                          catTpl.selectCategory(cat.id);
-                          catTpl.setSidebarView("phrases");
-                        }}
-                        onEdit={() => catTpl.openEditCategoryForm(cat, false)}
-                      />
-                    ))}
-                  </div>
-                )}
+                <div className="flex flex-col gap-1.5">
+                  {catTpl.categories.map((cat) => (
+                    <CategoryCard
+                      key={cat.id}
+                      category={cat}
+                      variant="sidebar"
+                      onSelect={() => {
+                        catTpl.selectCategory(cat.id);
+                        catTpl.setSidebarView("phrases");
+                      }}
+                      onEdit={() => catTpl.openEditCategoryForm(cat, false)}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 

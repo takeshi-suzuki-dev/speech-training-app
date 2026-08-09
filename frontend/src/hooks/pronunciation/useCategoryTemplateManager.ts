@@ -119,7 +119,7 @@ export function useCategoryTemplateManager({
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [favoritesOnly, setFavoritesOnly] = useState(false);
 
-  const [categoryLoading, setCategoryLoading] = useState(false);
+  const [categoryLoading, setCategoryLoading] = useState(true);
   const [templateLoading, setTemplateLoading] = useState(false);
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
@@ -250,12 +250,16 @@ export function useCategoryTemplateManager({
       }
     };
 
-    void loadAssessmentResults();
+    if (!user) {
+      setTemplateLatestScores(new Map());
+    } else {
+      void loadAssessmentResults();
+    }
 
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [user]);
 
   const refreshLatestScores = async () => {
     try {

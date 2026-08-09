@@ -17,6 +17,8 @@ import {
   fetchDailyScoreTrends,
 } from "@/lib/api/assessmentResults";
 import AppNav from "@/components/AppNav";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
+import { Spinner } from "@/components/Spinner";
 
 type TabType = "overall" | "breakdown";
 
@@ -79,6 +81,7 @@ function Card({
 
 // ═════════════════════════════════════════════════════════════
 export default function HistoryPage() {
+  const { user, isAuthInitialized } = useRequireAuth();
   const [activeTab, setActiveTab] = useState<TabType>("overall");
   const [trendData, setTrendData] = useState<DailyScoreTrendResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -105,24 +108,38 @@ export default function HistoryPage() {
   };
 
   useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    let ignore = false;
+
     async function loadTrendData() {
       try {
         setIsLoading(true);
         setErrorMessage(null);
         const data = await fetchDailyScoreTrends();
+        if (ignore) return;
         const sortedData = [...data].sort((a, b) =>
           a.practiceDate.localeCompare(b.practiceDate),
         );
         setTrendData(sortedData);
       } catch (error) {
+        if (ignore) return;
         console.error(error);
         setErrorMessage("Failed to load history trends.");
       } finally {
-        setIsLoading(false);
+        if (!ignore) {
+          setIsLoading(false);
+        }
       }
     }
     void loadTrendData();
-  }, []);
+
+    return () => {
+      ignore = true;
+    };
+  }, [user]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -143,13 +160,17 @@ export default function HistoryPage() {
     latestPoint.overallMovingAverage5Days >=
       latestPoint.overallMovingAverage20Days;
 
-  // ── Loading ───────────────────────────────────────────────
-  if (isLoading) {
+  // ── Not signed in yet, or loading data ──────────────────────
+  // Combined into one branch (rather than two separate early returns) so
+  // AppNav isn't unmounted and remounted between "checking auth" and
+  // "fetching trend data" — those two states happen back-to-back on every
+  // visit, and splitting them caused a visible flicker of the nav bar.
+  if (!isAuthInitialized || !user || isLoading) {
     return (
       <div className="min-h-dvh bg-linear-to-br from-pink-50 via-blue-50 to-emerald-50">
         <AppNav />
         <div className="flex items-center justify-center min-h-[60vh]">
-          <p className="text-sm text-gray-500">Loading history…</p>
+          <Spinner className="w-6 h-6 text-purple-400" />
         </div>
       </div>
     );

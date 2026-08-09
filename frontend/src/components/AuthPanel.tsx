@@ -7,6 +7,7 @@ import { FirebaseError } from "firebase/app";
 import { auth, googleProvider } from "@/lib/firebase";
 import { fetchAuthMe, AuthMeResponse } from "@/lib/api/auth";
 import { useAuthStore } from "@/hooks/useAuthStore";
+import { Spinner } from "@/components/Spinner";
 
 const PRONUNCIATION_PATH = "/pronunciation";
 
@@ -18,6 +19,7 @@ type PanelState =
 export function AuthPanel() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const isAuthInitialized = useAuthStore((state) => state.isAuthInitialized);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [panelState, setPanelState] = useState<PanelState | null>(null);
   const [didAutoRedirect, setDidAutoRedirect] = useState(false);
@@ -104,6 +106,15 @@ export function AuthPanel() {
       console.error("Logout failed:", error);
     }
   };
+
+  // ── Firebase hasn't resolved the initial auth state yet ─────
+  if (!isAuthInitialized) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-3">
+        <Spinner className="w-6 h-6 text-purple-400" />
+      </div>
+    );
+  }
 
   // ── Not signed in ──────────────────────────────────────────
   if (!user) {
