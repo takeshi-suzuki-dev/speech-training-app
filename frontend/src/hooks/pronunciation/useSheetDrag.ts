@@ -13,6 +13,7 @@ type SheetDrag = {
     onPointerMove: (event: React.PointerEvent) => void;
     onPointerUp: (event: React.PointerEvent) => void;
     onPointerCancel: (event: React.PointerEvent) => void;
+    style: React.CSSProperties;
   };
   /** Spread onto the sheet panel. */
   panelStyle: React.CSSProperties;
@@ -84,14 +85,16 @@ export function useSheetDrag(onDismiss: () => void): SheetDrag {
       onPointerMove,
       onPointerUp: finishDrag,
       onPointerCancel: finishDrag,
+      // Stops the browser from claiming the gesture as a scroll or a
+      // pull-to-refresh before the pointer handlers see it. Scoped to the
+      // handle only — applying this to the whole panel (as before) also
+      // disabled scrolling the sheet's own content.
+      style: { touchAction: "none" },
     },
     panelStyle: {
       transform: offsetY > 0 ? `translateY(${offsetY}px)` : undefined,
       // No transition while the finger is down, so the panel tracks it exactly.
       transition: isDragging ? undefined : "transform 200ms ease-out",
-      // Stops the browser from claiming the gesture as a scroll or a
-      // pull-to-refresh before the pointer handlers see it.
-      touchAction: "none",
     },
   };
 }

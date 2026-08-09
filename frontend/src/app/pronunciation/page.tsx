@@ -596,8 +596,15 @@ export default function PronunciationPage() {
           {/* ── Phrase panel ── */}
           <Card>
             <SectionLabel>Practice Phrase</SectionLabel>
+            {/* The sidebar clamps long phrases, so the title is what identifies
+                the selection there; repeat it here in full to confirm it. */}
+            {selectedTemplate?.title && (
+              <p className="text-sm font-bold text-purple-400 mb-2 wrap-break-word">
+                {selectedTemplate.title}
+              </p>
+            )}
             <p
-              className={`text-xl font-bold leading-snug mb-4 ${
+              className={`text-base font-bold leading-snug mb-4 ${
                 hasSelectedTemplate ? "text-gray-800" : "text-gray-400"
               }`}
             >
