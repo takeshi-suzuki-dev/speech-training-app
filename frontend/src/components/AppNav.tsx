@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { onAuthStateChanged, signOut, User } from "firebase/auth";
+import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { useAuthStore } from "@/hooks/useAuthStore";
 
 const navLinks = [
   { href: "/pronunciation", label: "Practice", icon: "🎙️" },
@@ -14,14 +15,9 @@ const navLinks = [
 export default function AppNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const user = useAuthStore((state) => state.user);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
 
   useEffect(() => {
     if (!isMenuOpen) return;

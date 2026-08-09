@@ -2,15 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  User,
-  onAuthStateChanged,
-  signInWithPopup,
-  signOut,
-} from "firebase/auth";
+import { signInWithPopup, signOut } from "firebase/auth";
 import { FirebaseError } from "firebase/app";
 import { auth, googleProvider } from "@/lib/firebase";
 import { fetchAuthMe, AuthMeResponse } from "@/lib/api/auth";
+import { useAuthStore } from "@/hooks/useAuthStore";
 
 const PRONUNCIATION_PATH = "/pronunciation";
 
@@ -21,7 +17,7 @@ type PanelState =
 
 export function AuthPanel() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const user = useAuthStore((state) => state.user);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [panelState, setPanelState] = useState<PanelState | null>(null);
   const [didAutoRedirect, setDidAutoRedirect] = useState(false);
@@ -30,17 +26,12 @@ export function AuthPanel() {
   const justLoggedInRef = useRef(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      if (!currentUser) {
-        setPanelState(null);
-        hasRedirectedRef.current = false;
-        setDidAutoRedirect(false);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
+    if (!user) {
+      setPanelState(null);
+      hasRedirectedRef.current = false;
+      setDidAutoRedirect(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;

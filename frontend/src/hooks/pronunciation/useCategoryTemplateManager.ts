@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { useAuthStore } from "@/hooks/useAuthStore";
 import {
   fetchLatestAssessmentResultsBySentence,
   TrainingAttemptResult,
@@ -110,6 +109,8 @@ export function useCategoryTemplateManager({
     removeCachedAudioForTemplateRef.current = removeCachedAudioForTemplate;
     reportErrorRef.current = reportError;
   });
+  const user = useAuthStore((state) => state.user);
+
   const [categories, setCategories] = useState<SentenceCategory[]>([]);
   const [templates, setTemplates] = useState<SentenceTemplate[]>([]);
   const [templateLatestScores, setTemplateLatestScores] = useState<
@@ -195,15 +196,14 @@ export function useCategoryTemplateManager({
       }
     };
 
-    const unsubscribe = onAuthStateChanged(auth, () => {
-      void loadCategories();
-    });
+    void loadCategories();
 
     return () => {
       ignore = true;
-      unsubscribe();
     };
-  }, []);
+    // Reruns on every sign-in/sign-out, matching the previous
+    // onAuthStateChanged-driven behavior.
+  }, [user]);
 
   useEffect(() => {
     let ignore = false;
@@ -222,22 +222,16 @@ export function useCategoryTemplateManager({
       }
     };
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (!user) {
-        if (!ignore) {
-          setFavorites(new Set());
-        }
-        return;
-      }
-
+    if (!user) {
+      setFavorites(new Set());
+    } else {
       void loadFavorites();
-    });
+    }
 
     return () => {
       ignore = true;
-      unsubscribe();
     };
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     let ignore = false;
