@@ -4,9 +4,9 @@ Turn any sentence you want to master — interview answers, your elevator pitch,
 
 The live application is branded "Cadence" in its UI; "Speech Training App" is this repository's project name.
 
-This project started with a Proof of Concept (PoC) to validate pronunciation scoring and sample audio generation, and has since completed Phase 1 (fixed-template MVP) and Phase 2 (authentication and allowlist-gated access). Both tiers are deployed and running on AWS ECS/Fargate.
+This project started with a Proof of Concept (PoC) to validate pronunciation scoring and sample audio generation, and has since completed Phase 1 (fixed-template MVP) and Phase 2 (authentication and allowlist-gated access). The frontend is deployed on Vercel and the backend on AWS ECS/Fargate.
 
-Live demo: https://d22r3g893vf4i5.cloudfront.net (access is allowlist-gated; see the landing page to request access)
+Live demo: https://speech-training-app-2f3r.vercel.app (access is allowlist-gated; see the landing page to request access)
 
 ---
 
@@ -112,9 +112,10 @@ For details:
 
 ### Infrastructure
 
-- AWS ECS/Fargate (both frontend and backend containers)
+- Vercel (frontend, deployed from GitHub on push)
+- AWS ECS/Fargate (backend container)
 - Application Load Balancer with path-based routing
-- CloudFront (TLS termination)
+- CloudFront (TLS termination for the API)
 - ECR, Secrets Manager, CloudWatch Logs
 - Docker multi-stage builds
 
@@ -184,8 +185,7 @@ Implemented scope:
 
 Deployment scope, completed after the application work above:
 
-- Frontend and backend containerized and deployed to AWS ECS/Fargate
-- Single Application Load Balancer routing `/api/*` to the backend and everything else to the frontend, so production is same-origin
+- Frontend and backend containerized and deployed to AWS ECS/Fargate, behind a single Application Load Balancer routing `/api/*` to the backend and everything else to the frontend, so production was same-origin. The frontend has since moved to Vercel — see "After Phase 2" below
 - CloudFront in front of the load balancer for HTTPS, which Firebase Authentication requires
 - All seven runtime secrets injected from Secrets Manager; `FirebaseConfig` accepts the service account as a JSON string with a fallback to Application Default Credentials for local development
 - Allowed CORS origins moved from a hardcoded value to `CORS_ALLOWED_ORIGINS`
@@ -195,7 +195,14 @@ Remaining before broader use:
 
 - Multiple sample-audio voice options (implemented at the database/design level; not yet exposed via API or UI — deferred to Phase 3)
 - Image tagging by commit hash instead of `latest`
-- Automated deployment pipeline; deployments are currently manual, following the runbook
+- Automated backend deployment pipeline; backend deployments are currently manual, following the runbook
+
+### After Phase 2 — Release stabilization
+
+- `CODING_GUIDELINES.md`, derived from the patterns the codebase already follows, so AI-assisted changes stay consistent with existing code
+- A single `useAuthStore` (Zustand) replacing three separate `onAuthStateChanged` subscriptions — a deliberate, narrowly scoped exception to the project's hook-local state convention
+- Route guards on `/pronunciation` and `/history`, with an `isAuthInitialized` flag so an already-signed-in visitor isn't briefly redirected on load
+- Frontend moved from a second Fargate task to Vercel, cutting roughly a third of the monthly cost and reducing frontend deployment to a git push. CloudFront remains, now fronting only the API
 
 For details:
 

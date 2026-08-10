@@ -1,6 +1,6 @@
 # Phase 2 Current Status
 
-Last updated: 2026-07-15
+Last updated: 2026-08-10
 
 ## Summary
 
@@ -10,7 +10,8 @@ Phase 1 was completed as a fixed-template MVP. The application can load fixed pr
 
 Phase 2 added Firebase authentication, an application-level allowlist, user-defined categories and sentence templates, favorites, and a landing page with a trial access request flow. Authentication and authorization are now consistently applied across all protected backend APIs.
 
-The app is deployed on AWS ECS/Fargate and ready for a controlled recruiter demo at https://d22r3g893vf4i5.cloudfront.net.
+The frontend is deployed on Vercel and the backend on AWS ECS/Fargate, ready for a
+controlled recruiter demo at https://speech-training-app-2f3r.vercel.app.
 
 ## Current Position
 
@@ -60,18 +61,49 @@ The app is currently positioned as:
 - Vitest + React Testing Library cover the shared pronunciation components, asserting handler wiring and per-variant rendering
 - WCAG AA contrast pass across the pronunciation and history screens (edit/favorite icons, chart axis labels, section labels), mobile viewport fix (`min-h-dvh` instead of `min-h-screen`) to remove a black gap below content on mobile, and a clickable/toggleable legend on the score-breakdown chart
 
+### Post-Phase-2 hardening
+
+Completed after Phase 2 was declared done, while stabilising for release:
+
+- `CODING_GUIDELINES.md` at the repository root, written from the patterns the
+  codebase already follows rather than an idealised style, so AI-assisted
+  changes stay consistent with existing code. It also records five known
+  inconsistencies and, for each, whether to fix or document it
+- A single `useAuthStore` (Zustand) replaces the three separate
+  `onAuthStateChanged` subscriptions that `AppNav`, `AuthPanel`, and
+  `useCategoryTemplateManager` each ran. This is a deliberate, narrowly scoped
+  exception to the project's otherwise hook-local state convention — see
+  `CODING_GUIDELINES.md` §3.3
+- Route guards: `/pronunciation` and `/history` redirect to the landing page
+  once Firebase confirms there is no signed-in user. `isAuthInitialized`
+  distinguishes "not yet checked" from "confirmed signed out", so an
+  already-signed-in visitor is not bounced on every load
+- Loading states no longer remount `AppNav` between "checking auth" and
+  "fetching data", which caused a visible flicker on every visit to
+  `/history`
+- Two regressions fixed: the selected template's title had been dropped from
+  the Practice Phrase panel as an unrelated side effect of an earlier commit,
+  and `touch-action: none` was applied to the whole bottom sheet rather than
+  its drag handle, silently disabling scrolling inside the sheet on touch
+  devices
+- The frontend moved from a second Fargate task to Vercel, cutting roughly a
+  third of the monthly cost and reducing frontend deployment to a git push.
+  CloudFront remains, now fronting only the API — see
+  `deployment-architecture.md`
+
 ## Remaining Work
 
 - Multiple sample-audio voice options are implemented at the database/design level (`sentence_template_voice_options`) but not yet exposed through the API or UI. This is deferred to Phase 3.
 - Images are tagged `latest`, which makes it impossible to tell which build is running and allowed a stale image to be deployed once. Tagging by commit hash is the fix.
-- Deployment is manual, following `infra/DEPLOY.md`. No pipeline yet.
+- Backend deployment is manual, following `infra/DEPLOY.md`. No pipeline yet.
+  The frontend deploys automatically from Vercel on push.
 - Automated coverage stops at the shared pronunciation components. The page, the hooks, and the backend have none, so the manual testing checklist (`phase2-manual-testing-checklist.md`) remains the primary regression check.
 
 ## Main Risk (Mitigated)
 
 Previously, the main risk was that the live app could become accessible to anyone who knew the URL and could sign in with Google. This is now mitigated: Firebase Authentication alone is no longer sufficient to use the app, because `FirebaseAuthenticationInterceptor` enforces the allowlist check on every protected request before it reaches a controller.
 
-The deployment risks anticipated here materialized as predicted and have been resolved. Firebase credentials did not resolve on Fargate, because ECS can inject secrets only as environment variables while the Admin SDK expects a file path; `FirebaseConfig` now reads the service account from `FIREBASE_CREDENTIALS_JSON` and falls back to Application Default Credentials locally. CORS also failed even though the deployed frontend and API share an origin, because browsers attach an `Origin` header to non-GET requests regardless; allowed origins now come from `CORS_ALLOWED_ORIGINS`.
+The deployment risks anticipated here materialized as predicted and have been resolved. Firebase credentials did not resolve on Fargate, because ECS can inject secrets only as environment variables while the Admin SDK expects a file path; `FirebaseConfig` now reads the service account from `FIREBASE_CREDENTIALS_JSON` and falls back to Application Default Credentials locally. CORS also failed even though the deployed frontend and API shared an origin at the time, because browsers attach an `Origin` header to non-GET requests regardless; allowed origins now come from `CORS_ALLOWED_ORIGINS`. That variable became load-bearing when the frontend moved to Vercel and the two genuinely became separate origins.
 
 One issue was not anticipated. Practice history was keyed on a browser-generated `client_id` that the backend accepted from the request without checking it belonged to the caller, so any authenticated user could read another user's history by supplying their id. The column is now `user_id`, derived server-side from the authenticated Firebase UID. See `deployment-architecture.md`.
 
