@@ -61,7 +61,7 @@
       "environment": [
         {
           "name": "CORS_ALLOWED_ORIGINS",
-          "value": "http://localhost:3000,https://d22r3g893vf4i5.cloudfront.net"
+          "value": "http://localhost:3000,https://speech-training-app-2f3r.vercel.app"
         },
         {
           "name": "ACCESS_REQUEST_TOPIC_ARN",
