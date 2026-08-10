@@ -52,7 +52,7 @@ Region: `ap-northeast-1`. Operational procedures are in
 Two security groups, referencing each other rather than IP ranges:
 
 - ALB security group: inbound 80 from the internet
-- Task security group: inbound 8080 and 3000 **from the ALB security group only**
+- Task security group: inbound 8080 **from the ALB security group only**
 
 Fargate task IPs change on every deployment, so an IP-based rule would be both
 unstable and too permissive. Referencing the ALB's security group means only
